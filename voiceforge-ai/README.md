@@ -254,4 +254,4 @@ In development mode (`NEXT_PUBLIC_DEV_AUTH=true`), the app uses JWT-based auth i
 ## License
 
 UNLICENSED — Proprietary. All rights reserved.
-Beelive Μονοπρόσωπη ΕΠΕ © 2026
+Salimov ΙΚΕ © 2026
