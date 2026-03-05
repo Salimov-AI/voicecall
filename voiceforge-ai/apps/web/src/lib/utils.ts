@@ -111,9 +111,9 @@ export const INDUSTRY_LABELS: Record<string, string> = {
 
 /** @deprecated Use getPlanLabels(t) instead */
 export const PLAN_LABELS: Record<string, { name: string; description: string; price: string }> = {
-  starter: { name: 'Starter', description: '100 λεπτά/μήνα, 1 agent, 1 αριθμός', price: '€29' },
-  pro: { name: 'Pro', description: '500 λεπτά/μήνα, 3 agents, 3 αριθμοί', price: '€79' },
-  business: { name: 'Business', description: '2000 λεπτά/μήνα, 10 agents, 10 αριθμοί', price: '€199' },
+  basic: { name: 'Basic', description: '400 λεπτά/μήνα, 1 agent, 1 αριθμός, Ελληνικά', price: '€200' },
+  pro: { name: 'Pro', description: '800 λεπτά/μήνα, 3 agents, 3 αριθμοί, EL+EN+DE', price: '€400' },
+  enterprise: { name: 'Enterprise', description: '2000 λεπτά/μήνα, 10 agents, 14+ γλώσσες', price: '€999' },
 };
 
 /** @deprecated Use getCallStatusLabels(t) instead */

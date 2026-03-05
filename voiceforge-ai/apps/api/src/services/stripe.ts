@@ -34,9 +34,9 @@ export function isStripeConfigured(): boolean {
 // ── Price Mapping ────────────────────────────────────────────────
 
 const PLAN_PRICE_MAP: Record<Plan, string> = {
-  starter: env.STRIPE_STARTER_PRICE_ID,
+  basic: env.STRIPE_BASIC_PRICE_ID,
   pro: env.STRIPE_PRO_PRICE_ID,
-  business: env.STRIPE_BUSINESS_PRICE_ID,
+  enterprise: env.STRIPE_ENTERPRISE_PRICE_ID,
 };
 
 // ═══════════════════════════════════════════════════════════════════

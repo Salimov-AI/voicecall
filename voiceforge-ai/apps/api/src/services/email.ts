@@ -271,16 +271,13 @@ export async function sendRegistrationNotificationEmail(params: {
   durationMonths: number;
 }): Promise<void> {
   const planLabels: Record<string, string> = {
-    starter: 'Starter — €29/μήνα',
-    professional: 'Professional — €79/μήνα',
-    business: 'Business — €199/μήνα',
-    enterprise: 'Enterprise — Κατόπιν συμφωνίας',
+    basic: 'Basic — €200/μήνα',
+    pro: 'Pro — €400/μήνα',
+    enterprise: 'Enterprise — €999/μήνα',
   };
 
-  const totalPrice = params.plan === 'enterprise'
-    ? 'Κατόπιν συμφωνίας'
-    : `€${(
-        { starter: 29, professional: 79, business: 199 }[params.plan] ?? 0
+  const totalPrice = `€${(
+        { basic: 200, pro: 400, enterprise: 999 }[params.plan] ?? 0
       ) * params.durationMonths}`;
 
   // Admin email — in production, set this via env var
@@ -375,9 +372,8 @@ export async function sendLicenseKeyEmail(params: {
   expiresAt: Date;
 }): Promise<void> {
   const planLabels: Record<string, string> = {
-    starter: 'Starter',
-    professional: 'Professional',
-    business: 'Business',
+    basic: 'Basic',
+    pro: 'Pro',
     enterprise: 'Enterprise',
   };
 

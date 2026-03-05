@@ -30,7 +30,7 @@ export const registrationRoutes = new Hono();
 const BANK_DETAILS = {
   bankName: 'Τράπεζα Πειραιώς',
   iban: 'GR12 0172 0010 0050 1234 5678 901',
-  beneficiary: 'BEELIVE ΜΟΝΟΠΡΟΣΩΠΗ ΕΠΕ',
+  beneficiary: 'SALIMOV ΙΚΕ',
   swift: 'PIABORAA',
   note: 'Στην αιτιολογία κατάθεσης αναγράψτε το ΑΦΜ σας και το email εγγραφής.',
 };
@@ -41,63 +41,52 @@ const BANK_DETAILS = {
 
 const PLANS = [
   {
-    id: 'starter',
-    name: 'Starter',
+    id: 'basic',
+    name: 'Basic',
     description: 'Για μικρές επιχειρήσεις',
-    priceMonthly: 29,
+    priceMonthly: 200,
     features: [
+      'Ελληνική γλώσσα',
       '1 AI Agent',
       '1 Αριθμός τηλεφώνου',
-      '500 λεπτά κλήσεων/μήνα',
+      '400 λεπτά κλήσεων/μήνα',
+      'Διαχείριση ραντεβού',
+      'SMS επιβεβαίωσης',
       'Email υποστήριξη',
-      'Βασικό knowledge base',
     ],
   },
   {
-    id: 'professional',
-    name: 'Professional',
+    id: 'pro',
+    name: 'Pro',
     description: 'Για αναπτυσσόμενες επιχειρήσεις',
-    priceMonthly: 79,
+    priceMonthly: 400,
     features: [
+      'Ελληνικά, Αγγλικά & Γερμανικά',
       '3 AI Agents',
       '3 Αριθμοί τηλεφώνου',
-      '2.000 λεπτά κλήσεων/μήνα',
+      '800 λεπτά κλήσεων/μήνα',
+      'Διαχείριση ραντεβού',
+      'SMS επιβεβαίωσης',
       'Priority υποστήριξη',
-      'Προηγμένο knowledge base',
-      'Αναλυτικά στατιστικά',
-      'Webhooks & integrations',
+      'Ετήσια συνδρομή: Landing Page + 3 αναθεωρήσεις',
     ],
     popular: true,
   },
   {
-    id: 'business',
-    name: 'Business',
-    description: 'Για μεγάλες επιχειρήσεις',
-    priceMonthly: 199,
-    features: [
-      '10 AI Agents',
-      '10 Αριθμοί τηλεφώνου',
-      '10.000 λεπτά κλήσεων/μήνα',
-      'Dedicated υποστήριξη 24/7',
-      'Custom knowledge base',
-      'API πρόσβαση',
-      'SLA εγγυημένο uptime 99.9%',
-      'Custom integrations',
-    ],
-  },
-  {
     id: 'enterprise',
     name: 'Enterprise',
-    description: 'Εξατομικευμένη λύση',
-    priceMonthly: null,
+    description: 'Για μεγάλες επιχειρήσεις',
+    priceMonthly: 999,
     features: [
-      'Απεριόριστοι AI Agents',
-      'Απεριόριστοι αριθμοί',
-      'Απεριόριστα λεπτά',
-      'Dedicated account manager',
-      'On-premise deployment',
-      'Custom development',
-      'SLA εγγυημένο uptime 99.99%',
+      '14+ γλώσσες',
+      '10 AI Agents',
+      '10 Αριθμοί τηλεφώνου',
+      '2.000 λεπτά κλήσεων/μήνα',
+      'Ομάδες βοηθών (Agent Teams)',
+      'Αναγνώριση πελατών',
+      'Rollover λεπτών',
+      'Dedicated υποστήριξη 24/7',
+      'SLA εγγυημένο uptime 99.9%',
     ],
   },
 ];
@@ -133,7 +122,7 @@ const registrationSchema = z.object({
   businessAddress: z.string().min(5, 'Η διεύθυνση είναι υποχρεωτική'),
 
   // Plan selection
-  plan: z.enum(['starter', 'professional', 'business', 'enterprise']),
+  plan: z.enum(['basic', 'pro', 'enterprise']),
   durationMonths: z.number().int().min(1).max(12),
 
   // Role selection
@@ -197,7 +186,7 @@ registrationRoutes.post('/register', zValidator('json', registrationSchema), asy
   const passwordHashed = hashPassword(data.password);
 
   // Calculate total price
-  const prices: Record<string, number> = { starter: 29, professional: 79, business: 199 };
+  const prices: Record<string, number> = { basic: 200, pro: 400, enterprise: 999 };
   const monthlyPrice = prices[data.plan] ?? 0;
   const totalPrice = monthlyPrice * data.durationMonths;
 

@@ -73,9 +73,8 @@ export default function ActivatePage() {
   };
 
   const planLabels: Record<string, string> = {
-    starter: 'Starter',
-    professional: 'Professional',
-    business: 'Business',
+    basic: 'Basic',
+    pro: 'Pro',
     enterprise: 'Enterprise',
   };
 

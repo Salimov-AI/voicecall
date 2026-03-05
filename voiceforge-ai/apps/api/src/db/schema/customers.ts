@@ -22,7 +22,7 @@ export const industryEnum = pgEnum('industry', [
   'general',
 ]);
 
-export const planEnum = pgEnum('plan', ['starter', 'pro', 'business']);
+export const planEnum = pgEnum('plan', ['basic', 'pro', 'enterprise']);
 export const userRoleEnum = pgEnum('user_role', ['naive', 'expert']);
 
 // ── Table ────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ export const customers = pgTable('customers', {
   ownerName: text('owner_name').notNull(),
   email: text('email').notNull(),
   phone: text('phone').notNull(),
-  plan: planEnum('plan').notNull().default('starter'),
+  plan: planEnum('plan').notNull().default('basic'),
   userRole: userRoleEnum('user_role').notNull().default('naive'),
 
   // Telnyx integration (encrypted secrets)

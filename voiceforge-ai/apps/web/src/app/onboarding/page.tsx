@@ -66,7 +66,7 @@ const initialData: OnboardingData = {
   email: '',
   phone: '',
   timezone: 'Europe/Athens',
-  plan: 'starter',
+  plan: 'basic',
   agentName: '',
   greeting: '',
   instructions: '',

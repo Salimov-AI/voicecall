@@ -32,33 +32,26 @@ interface Plan {
 
 const PLANS: Plan[] = [
   {
-    id: 'starter',
-    name: 'Starter',
+    id: 'basic',
+    name: 'Basic',
     description: 'Για μικρές επιχειρήσεις',
-    priceMonthly: 29,
-    features: ['1 AI Agent', '1 Αριθμός τηλεφώνου', '500 λεπτά/μήνα', 'Email υποστήριξη'],
+    priceMonthly: 200,
+    features: ['Ελληνική γλώσσα', '1 AI Agent', '1 Αριθμός', '400 λεπτά/μήνα', 'Διαχείριση ραντεβού', 'SMS'],
   },
   {
-    id: 'professional',
-    name: 'Professional',
+    id: 'pro',
+    name: 'Pro',
     description: 'Για αναπτυσσόμενες επιχειρήσεις',
-    priceMonthly: 79,
-    features: ['3 AI Agents', '3 Αριθμοί', '2.000 λεπτά/μήνα', 'Priority υποστήριξη', 'Webhooks'],
+    priceMonthly: 400,
+    features: ['EL+EN+DE', '3 AI Agents', '3 Αριθμοί', '800 λεπτά/μήνα', 'Priority υποστήριξη', 'Landing Page'],
     popular: true,
-  },
-  {
-    id: 'business',
-    name: 'Business',
-    description: 'Για μεγάλες επιχειρήσεις',
-    priceMonthly: 199,
-    features: ['10 AI Agents', '10 Αριθμοί', '10.000 λεπτά/μήνα', '24/7 υποστήριξη', 'API πρόσβαση', 'SLA 99.9%'],
   },
   {
     id: 'enterprise',
     name: 'Enterprise',
-    description: 'Εξατομικευμένη λύση',
-    priceMonthly: null,
-    features: ['Απεριόριστοι Agents', 'Απεριόριστα λεπτά', 'Account Manager', 'Custom development'],
+    description: 'Για μεγάλες επιχειρήσεις',
+    priceMonthly: 999,
+    features: ['14+ γλώσσες', '10 AI Agents', '10 Αριθμοί', '2.000 λεπτά/μήνα', 'Agent Teams', 'SLA 99.9%'],
   },
 ];
 
@@ -99,7 +92,7 @@ export default function RegisterPage() {
   const [businessAddress, setBusinessAddress] = useState('');
 
   // Plan
-  const [selectedPlan, setSelectedPlan] = useState('professional');
+  const [selectedPlan, setSelectedPlan] = useState('pro');
   const [durationMonths, setDurationMonths] = useState('3');
 
   // After submission

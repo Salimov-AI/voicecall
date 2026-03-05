@@ -23,11 +23,11 @@ export const billingWebhookRoutes = new Hono();
 // ── Validation ───────────────────────────────────────────────────
 
 const checkoutSchema = z.object({
-  plan: z.enum(['starter', 'pro', 'business']),
+  plan: z.enum(['basic', 'pro', 'enterprise']),
 });
 
 const changePlanSchema = z.object({
-  plan: z.enum(['starter', 'pro', 'business']),
+  plan: z.enum(['basic', 'pro', 'enterprise']),
 });
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -305,12 +305,12 @@ billingWebhookRoutes.post('/stripe', async (c) => {
             .set({
               isActive: false,
               stripeSubscriptionId: null,
-              plan: 'starter',
+              plan: 'basic',
               updatedAt: new Date(),
             })
             .where(eq(customers.id, customerId));
 
-          log.info({ customerId }, 'Subscription deleted — reverted to starter');
+          log.info({ customerId }, 'Subscription deleted — reverted to basic');
         }
         break;
       }

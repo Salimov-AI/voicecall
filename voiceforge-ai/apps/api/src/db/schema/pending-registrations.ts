@@ -25,7 +25,7 @@ export const pendingRegistrations = pgTable('pending_registrations', {
   businessAddress: text('business_address').notNull(),
 
   // Plan selection
-  plan: text('plan').notNull(),          // 'starter' | 'pro' | 'business'
+  plan: text('plan').notNull(),          // 'basic' | 'pro' | 'enterprise'
   durationMonths: integer('duration_months').notNull(),
 
   // User role

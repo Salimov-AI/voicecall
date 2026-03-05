@@ -250,7 +250,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
   // ── Actions ──
 
   const handleGenerateKey = async (reg: Registration) => {
-    const prices: Record<string, number> = { starter: 2900, professional: 7900, business: 19900 };
+    const prices: Record<string, number> = { basic: 20000, pro: 40000, enterprise: 99900 };
     try {
       await adminFetch('/admin/license-keys/generate', token, {
         method: 'POST',
@@ -294,9 +294,8 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
   };
 
   const planLabels: Record<string, string> = {
-    starter: 'Starter',
-    professional: 'Professional',
-    business: 'Business',
+    basic: 'Basic',
+    pro: 'Pro',
     enterprise: 'Enterprise',
   };
 

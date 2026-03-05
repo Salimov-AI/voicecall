@@ -52,7 +52,7 @@ export default function SettingsPage() {
     }
   };
 
-  const planInfo = planLabels[profile?.plan ?? 'starter']!;
+  const planInfo = planLabels[profile?.plan ?? 'basic']!;
 
   return (
     <div>

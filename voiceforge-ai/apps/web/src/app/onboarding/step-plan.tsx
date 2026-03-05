@@ -19,29 +19,33 @@ interface StepPlanProps {
 }
 
 const PLAN_FEATURES: Record<Plan, string[]> = {
-  starter: [
-    '100 λεπτά κλήσεων / μήνα',
+  basic: [
+    '400 λεπτά κλήσεων / μήνα',
     '1 AI βοηθός',
     '1 τηλεφωνικός αριθμός',
+    'Ελληνική γλώσσα',
+    'Διαχείριση ραντεβού',
+    'SMS επιβεβαίωσης',
     'Email υποστήριξη',
-    'Βασικά analytics',
   ],
   pro: [
-    '500 λεπτά κλήσεων / μήνα',
+    '800 λεπτά κλήσεων / μήνα',
     '3 AI βοηθοί',
     '3 τηλεφωνικοί αριθμοί',
+    'Ελληνικά, Αγγλικά & Γερμανικά',
     'Priority υποστήριξη',
     'Αναλυτικά analytics & insights',
-    'Google Calendar σύνδεση',
+    'Ετήσια: Landing Page + 3 αναθεωρήσεις',
   ],
-  business: [
+  enterprise: [
     '2000 λεπτά κλήσεων / μήνα',
     '10 AI βοηθοί',
     '10 τηλεφωνικοί αριθμοί',
-    'Dedicated υποστήριξη',
-    'Πλήρη analytics & reports',
-    'Google Calendar + CRM σύνδεση',
-    'Custom voice training',
+    '14+ γλώσσες',
+    'Ομάδες βοηθών (Agent Teams)',
+    'Αναγνώριση πελατών',
+    'Rollover λεπτών',
+    'Dedicated υποστήριξη 24/7',
     'SLA 99.9% uptime',
   ],
 };

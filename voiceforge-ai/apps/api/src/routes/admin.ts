@@ -135,7 +135,7 @@ adminRoutes.get('/registrations/:id', async (c) => {
 
 const generateKeySchema = z.object({
   registrationId: z.string().uuid(),
-  plan: z.enum(['starter', 'professional', 'business', 'enterprise']),
+  plan: z.enum(['basic', 'pro', 'enterprise']),
   durationMonths: z.number().int().min(1).max(12),
   pricePaid: z.number().int().min(0).optional(), // cents
   notes: z.string().optional(),

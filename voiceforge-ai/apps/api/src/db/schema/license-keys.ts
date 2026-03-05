@@ -26,7 +26,7 @@ export const licenseKeys = pgTable('license_keys', {
   licenseKey: text('license_key').notNull().unique(),
 
   // Plan this key grants access to
-  plan: text('plan').notNull(), // 'starter' | 'pro' | 'business'
+  plan: text('plan').notNull(), // 'basic' | 'pro' | 'enterprise'
 
   // Duration in months (1-12)
   durationMonths: integer('duration_months').notNull(),

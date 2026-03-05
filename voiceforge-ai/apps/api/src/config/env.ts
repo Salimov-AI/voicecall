@@ -58,9 +58,9 @@ const envSchema = z.object({
   // Stripe (optional in dev — required for billing features)
   STRIPE_SECRET_KEY: z.string().default(''),
   STRIPE_WEBHOOK_SECRET: z.string().default(''),
-  STRIPE_STARTER_PRICE_ID: z.string().default(''),
+  STRIPE_BASIC_PRICE_ID: z.string().default(''),
   STRIPE_PRO_PRICE_ID: z.string().default(''),
-  STRIPE_BUSINESS_PRICE_ID: z.string().default(''),
+  STRIPE_ENTERPRISE_PRICE_ID: z.string().default(''),
 
   // Google Calendar
   GOOGLE_CLIENT_ID: z.string().optional(),
