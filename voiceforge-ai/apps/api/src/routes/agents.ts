@@ -32,7 +32,7 @@ const createAgentSchema = z.object({
   industry: z.string().min(1),
   instructions: z.string().min(10),
   greeting: z.string().min(1),
-  ttsModel: z.string().optional().default('eleven_flash_v2_5'),
+  ttsModel: z.string().optional().default('eleven_v3_conversational'),
   llmModel: z.string().optional().default('gpt-4o-mini'),
   voiceId: z.string().optional().default(''),  // Will use env default if empty
   language: z.string().optional().default('el'),
@@ -40,6 +40,9 @@ const createAgentSchema = z.object({
   forwardPhoneNumber: z.string().optional(), // Business owner's real phone for call transfers
   dynamicVariables: z.record(z.string()).optional(),
   knowledgeBaseDocIds: z.array(z.string()).optional(),
+  voiceStability: z.number().min(0).max(1).optional(),
+  voiceSimilarity: z.number().min(0).max(1).optional(),
+  voiceSpeed: z.number().min(0.7).max(1.3).optional(),
   /** If provided, reuse existing ElevenLabs agent (from test-preview) instead of creating new */
   existingElevenlabsAgentId: z.string().optional(),
 });
@@ -52,9 +55,13 @@ const updateAgentSchema = z.object({
   ttsModel: z.string().optional(),
   llmModel: z.string().optional(),
   voiceId: z.string().optional(),
+  language: z.string().optional(),
   supportedLanguages: z.array(z.string()).optional(),
   forwardPhoneNumber: z.string().optional(), // Business owner's real phone for call transfers
   dynamicVariables: z.record(z.string()).optional(),
+  voiceStability: z.number().min(0).max(1).optional(),
+  voiceSimilarity: z.number().min(0).max(1).optional(),
+  voiceSpeed: z.number().min(0.7).max(1.3).optional(),
 });
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -75,6 +82,45 @@ async function getCustomerByUserId(userId: string) {
  * The v3 model supports 79 languages natively — accent/sound depends on the **prompt language**.
  * Per-language instruction sections ensure native sound in each language.
  */
+
+/**
+ * Build a strong language PREFIX that goes at the VERY START of the prompt.
+ * This overrides the prompt language and forces the agent to speak in the selected language(s).
+ */
+function buildLanguagePrefix(primaryLang: string, supportedLangs: string[]): string {
+  const primary = SUPPORTED_LANGUAGES.find(l => l.code === primaryLang);
+  if (!primary) return '';
+
+  if (supportedLangs.length <= 1) {
+    // Single language — absolute enforcement
+    return [
+      `[MANDATORY LANGUAGE: ${primary.nameEn.toUpperCase()}]`,
+      `You MUST speak ONLY in ${primary.nameEn}. This is non-negotiable.`,
+      `Regardless of what language the instructions below are written in, you MUST respond in ${primary.nameEn}.`,
+      `Your accent, pronunciation, grammar, and vocabulary must be native ${primary.nameEn}.`,
+      `If someone speaks to you in another language, respond in ${primary.nameEn} and politely explain you only speak ${primary.nameEn}.`,
+      '',
+    ].join('\n');
+  }
+
+  // Multi-language — primary + detection
+  const otherLangs = supportedLangs
+    .filter(c => c !== primaryLang)
+    .map(c => SUPPORTED_LANGUAGES.find(l => l.code === c)?.nameEn || c)
+    .join(', ');
+
+  return [
+    `[MANDATORY LANGUAGE: ${primary.nameEn.toUpperCase()} (PRIMARY)]`,
+    `Your DEFAULT language is ${primary.nameEn}. Start every conversation in ${primary.nameEn}.`,
+    `Regardless of what language the instructions below are written in, you MUST respond in ${primary.nameEn} by default.`,
+    `Your accent, pronunciation, grammar, and vocabulary must be native ${primary.nameEn}.`,
+    `You also support: ${otherLangs}.`,
+    `If the caller speaks one of these supported languages, switch to THAT language immediately and continue the entire conversation in it.`,
+    `Always match the caller's language. Never mix languages in a single response.`,
+    '',
+  ].join('\n');
+}
+
 function buildLanguageInstructions(supportedLangs: string[], customerLocale: string): string {
   if (supportedLangs.length <= 1) {
     // Single language — no need for detection logic
@@ -164,10 +210,13 @@ const testPreviewSchema = z.object({
   greeting: z.string().min(1),
   voiceId: z.string().optional().default('aTP4J5SJLQl74WTSRXKW'),
   language: z.string().optional().default('el'),
-  ttsModel: z.string().optional().default('eleven_flash_v2_5'),
+  ttsModel: z.string().optional().default('eleven_v3_conversational'),
   llmModel: z.string().optional().default('gpt-4o-mini'),
   /** If provided, update existing preview agent instead of creating a new one */
   existingAgentId: z.string().optional(),
+  voiceStability: z.number().min(0).max(1).optional(),
+  voiceSimilarity: z.number().min(0).max(1).optional(),
+  voiceSpeed: z.number().min(0.7).max(1.3).optional(),
 });
 
 agentRoutes.post('/test-preview', zValidator('json', testPreviewSchema), async (c) => {
@@ -195,6 +244,9 @@ agentRoutes.post('/test-preview', zValidator('json', testPreviewSchema), async (
         voiceId,
         ttsModel: body.ttsModel,
         llmModel: body.llmModel,
+        voiceStability: body.voiceStability,
+        voiceSimilarity: body.voiceSimilarity,
+        voiceSpeed: body.voiceSpeed,
       });
 
       log.info({ agentId: body.existingAgentId }, 'Updated preview agent');
@@ -213,6 +265,9 @@ agentRoutes.post('/test-preview', zValidator('json', testPreviewSchema), async (
       language: body.language,
       ttsModel: body.ttsModel,
       llmModel: body.llmModel,
+      voiceStability: body.voiceStability,
+      voiceSimilarity: body.voiceSimilarity,
+      voiceSpeed: body.voiceSpeed,
     });
 
     log.info({ agentId: result.agentId }, 'Created preview agent');
@@ -439,8 +494,9 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
         'Learn and remember important details: name, preferences, service interests, allergies/special needs.\n',
       ].join('\n');
 
-  // Compose the full enhanced instructions
-  const enhancedInstructions = body.instructions + safetyInstructions + callManagementInstructions + dateTimeInjection + languageInstructions + memoryInstructions;
+  // Compose the full enhanced instructions — language prefix goes FIRST to override prompt language
+  const languagePrefix = buildLanguagePrefix(body.language || supportedLangs[0] || 'el', supportedLangs);
+  const enhancedInstructions = languagePrefix + body.instructions + safetyInstructions + callManagementInstructions + dateTimeInjection + languageInstructions + memoryInstructions;
 
   try {
     let elevenlabsAgentId: string | null = null;
@@ -466,6 +522,9 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
           voiceId,
           ttsModel: body.ttsModel,
           llmModel: body.llmModel,
+          voiceStability: body.voiceStability,
+          voiceSimilarity: body.voiceSimilarity,
+          voiceSpeed: body.voiceSpeed,
         });
         elevenlabsAgentId = body.existingElevenlabsAgentId;
         log.info({ agentId: elevenlabsAgentId }, 'Reused preview agent');
@@ -483,6 +542,9 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
           knowledgeBaseDocs,
           webhookTools,
           forwardPhoneNumber: body.forwardPhoneNumber,
+          voiceStability: body.voiceStability,
+          voiceSimilarity: body.voiceSimilarity,
+          voiceSpeed: body.voiceSpeed,
         });
         elevenlabsAgentId = result.agentId;
       }
@@ -518,6 +580,9 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
         tools: webhookTools,
         forwardPhoneNumber: body.forwardPhoneNumber ?? null,
         dynamicVariables: body.dynamicVariables ?? {},
+        ...(body.voiceStability !== undefined ? { voiceStability: body.voiceStability } : {}),
+        ...(body.voiceSimilarity !== undefined ? { voiceSimilarity: body.voiceSimilarity } : {}),
+        ...(body.voiceSpeed !== undefined ? { voiceSpeed: body.voiceSpeed } : {}),
         isDefault: isFirst,
       })
       .returning();
@@ -609,7 +674,8 @@ agentRoutes.patch('/:id', zValidator('json', updateAgentSchema), async (c) => {
     const updateMemoryInstructions = updateCustomerLocale === 'el'
       ? '\n[ΜΝΗΜΗ ΠΕΛΑΤΩΝ]\nΈχεις πρόσβαση στο εργαλείο "get_caller_history". ΠΑΝΤΑ κάλεσέ το στην αρχή της κλήσης με το τηλέφωνο του καλούντα.\nΑν ο πελάτης έχει καλέσει ξανά, θα λάβεις ιστορικό. Χρησιμοποίησέ το φυσικά.\nΑν δεν υπάρχει ιστορικό, ρώτα ευγενικά το όνομα και τον λόγο κλήσης.\n'
       : '\n[CALLER MEMORY]\nYou have access to "get_caller_history". ALWAYS call it at the start with the caller phone.\nUse history naturally. If no history, politely ask name and reason.\n';
-    const updateEnhancedInstructions = updatedInstructions + updateSafetyInstructions + updateCallMgmt + updateDateTimeInjection + updateLangInstructions + updateMemoryInstructions;
+    const updateLanguagePrefix = buildLanguagePrefix(body.language || (agent.language as string) || updatedSupportedLangs[0] || 'el', updatedSupportedLangs);
+    const updateEnhancedInstructions = updateLanguagePrefix + updatedInstructions + updateSafetyInstructions + updateCallMgmt + updateDateTimeInjection + updateLangInstructions + updateMemoryInstructions;
 
     // Update on ElevenLabs (skip in dev bypass)
     if (!isDevBypass() && agent.elevenlabsAgentId && !agent.elevenlabsAgentId.startsWith('dev_')) {
@@ -618,9 +684,13 @@ agentRoutes.patch('/:id', zValidator('json', updateAgentSchema), async (c) => {
         instructions: updateEnhancedInstructions,
         greeting: body.greeting,
         voiceId: body.voiceId,
+        language: body.language || (agent.language as string),
         ttsModel: body.ttsModel,
         llmModel: body.llmModel,
         forwardPhoneNumber: body.forwardPhoneNumber,
+        voiceStability: body.voiceStability,
+        voiceSimilarity: body.voiceSimilarity,
+        voiceSpeed: body.voiceSpeed,
       });
     }
 
@@ -635,9 +705,13 @@ agentRoutes.patch('/:id', zValidator('json', updateAgentSchema), async (c) => {
         ...(body.ttsModel ? { model: body.ttsModel } : {}),
         ...(body.llmModel ? { llmModel: body.llmModel } : {}),
         ...(body.voiceId ? { voiceId: body.voiceId } : {}),
+        ...(body.language ? { language: body.language } : {}),
         ...(body.supportedLanguages ? { supportedLanguages: body.supportedLanguages } : {}),
         ...(body.forwardPhoneNumber !== undefined ? { forwardPhoneNumber: body.forwardPhoneNumber } : {}),
         ...(body.dynamicVariables ? { dynamicVariables: body.dynamicVariables } : {}),
+        ...(body.voiceStability !== undefined ? { voiceStability: body.voiceStability } : {}),
+        ...(body.voiceSimilarity !== undefined ? { voiceSimilarity: body.voiceSimilarity } : {}),
+        ...(body.voiceSpeed !== undefined ? { voiceSpeed: body.voiceSpeed } : {}),
         updatedAt: new Date(),
       })
       .where(eq(agents.id, agentId))

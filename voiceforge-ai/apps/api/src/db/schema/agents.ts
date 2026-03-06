@@ -4,7 +4,7 @@
 // Primary: ElevenLabs | Legacy: Telnyx | Dev: Bypass mode
 // ═══════════════════════════════════════════════════════════════════
 
-import { pgTable, uuid, text, boolean, timestamp, integer, jsonb, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, timestamp, integer, real, jsonb, pgEnum } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { customers } from './customers';
 import { calls } from './calls';
@@ -43,14 +43,16 @@ export const agents = pgTable('agents', {
 
   // LLM config
   llmModel: text('llm_model').notNull().default('gpt-4o-mini'), // ElevenLabs LLM: gpt-4o-mini, gpt-4o, claude-3-5-sonnet, gemini-2.0-flash
-  model: text('model').notNull().default('eleven_flash_v2_5'), // TTS model: eleven_multilingual_v2, eleven_flash_v2_5, eleven_turbo_v2_5
+  model: text('model').notNull().default('eleven_v3_conversational'), // TTS model: eleven_v3_conversational, eleven_multilingual_v2, eleven_flash_v2_5, eleven_turbo_v2_5
   instructions: text('instructions').notNull(), // System prompt with {{dynamic_variables}}
   greeting: text('greeting').notNull(), // Opening line
   llmApiKeyRef: text('llm_api_key_ref'), // Integration secret identifier (BYO key)
 
   // Voice (TTS)
   voiceId: text('voice_id').notNull().default('aTP4J5SJLQl74WTSRXKW'), // ElevenLabs Σοφία
-  voiceSpeed: integer('voice_speed').notNull().default(1),
+  voiceSpeed: real('voice_speed').notNull().default(0.95), // 0.7-1.3, default 0.95 for natural Greek
+  voiceStability: real('voice_stability').notNull().default(0.6), // 0-1, higher = more consistent
+  voiceSimilarity: real('voice_similarity').notNull().default(0.8), // 0-1, higher = closer to original
   voiceApiKeyRef: text('voice_api_key_ref'), // ElevenLabs integration secret
 
   // Phone

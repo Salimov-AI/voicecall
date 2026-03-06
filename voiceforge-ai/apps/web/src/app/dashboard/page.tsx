@@ -18,9 +18,9 @@ import type { ApiResponse, CallSummary } from '@voiceforge/shared';
 
 interface AnalyticsSummary {
   totalCalls: number;
-  totalDuration: number;
-  avgDuration: number;
-  completedCalls: number;
+  totalMinutes: number;
+  averageDuration: number;
+  averageSentiment: number;
   missedCalls: number;
   appointmentsBooked: number;
 }
@@ -84,14 +84,14 @@ export default function DashboardPage() {
     },
     {
       label: t.dashboard.quickStats.completed,
-      value: analytics?.completedCalls ?? 0,
+      value: (analytics?.totalCalls ?? 0) - (analytics?.missedCalls ?? 0),
       icon: PhoneIncoming,
       color: 'text-success-500',
       bgColor: 'bg-success-50',
     },
     {
       label: t.dashboard.quickStats.avgTime,
-      value: formatDuration(analytics?.avgDuration ?? 0),
+      value: formatDuration(analytics?.averageDuration ?? 0),
       icon: Clock,
       color: 'text-warning-500',
       bgColor: 'bg-warning-50',

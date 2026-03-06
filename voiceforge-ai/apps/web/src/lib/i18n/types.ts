@@ -236,6 +236,8 @@ export interface Translations {
     };
     supportedLanguages: string;
     supportedLanguagesHint: string;
+    primaryLanguage: string;
+    primaryLanguageHint: string;
     languageSelectPlaceholder: string;
     aiKnowledgeWizard: string;
     aiKnowledgeWizardDescription: string;

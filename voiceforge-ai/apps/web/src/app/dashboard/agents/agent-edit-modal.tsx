@@ -46,7 +46,7 @@ type ModalTab = 'settings' | 'knowledge-base' | 'ai-wizard';
 
 export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProps) {
   const isEditing = !!agentId;
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const industryOpts = Object.entries(getIndustryLabels(t)).map(([value, label]) => ({ value, label }));
   const voiceOptions = GREEK_VOICES.map((v) => ({
@@ -68,10 +68,21 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
   const [ttsModel, setTtsModel] = useState(DEFAULT_TTS_MODEL);
   const [forwardPhoneNumber, setForwardPhoneNumber] = useState('');
   const [supportedLanguages, setSupportedLanguages] = useState<string[]>(['el']);
+  const [primaryLanguage, setPrimaryLanguage] = useState('el');
   const [elevenlabsAgentId, setElevenlabsAgentId] = useState<string | null>(null);
 
   // Conversational voice test
   const [showTestWidget, setShowTestWidget] = useState(false);
+
+  // Keep primaryLanguage in sync — if removed from supported list, pick first remaining
+  const updateSupportedLanguages = (langs: string[]) => {
+    setSupportedLanguages(langs);
+    if (langs.length === 1) {
+      setPrimaryLanguage(langs[0] ?? 'el');
+    } else if (!langs.includes(primaryLanguage)) {
+      setPrimaryLanguage(langs[0] ?? 'el');
+    }
+  };
 
   /** Apply industry template when user selects an industry (only for new agents) */
   const handleIndustryChange = (value: string) => {
@@ -95,7 +106,7 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
         }
         // Set suggested languages
         if (supportedLanguages.length <= 1 && supportedLanguages[0] === 'el') {
-          setSupportedLanguages(template.suggestedLanguages);
+          updateSupportedLanguages(template.suggestedLanguages);
         }
         toast.success(
           `✨ ${template.nameEl} — ${t.onboarding.templateApplied}`,
@@ -126,6 +137,9 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
           if (agent.supportedLanguages && Array.isArray(agent.supportedLanguages)) {
             setSupportedLanguages(agent.supportedLanguages as string[]);
           }
+          if (agent.language) {
+            setPrimaryLanguage(agent.language);
+          }
           if (agent.elevenlabsAgentId) {
             setElevenlabsAgentId(agent.elevenlabsAgentId);
           }
@@ -154,7 +168,7 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
         voiceId,
         ttsModel,
         llmModel,
-        language: supportedLanguages[0] || 'el',
+        language: primaryLanguage,
         supportedLanguages,
         forwardPhoneNumber: forwardPhoneNumber.trim() || undefined,
       };
@@ -256,7 +270,7 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
               <div className="flex items-center gap-2 px-3 py-2 bg-brand-500/5 border border-brand-500/20 rounded-xl">
                 <Wand2 className="w-4 h-4 text-brand-500 shrink-0" />
                 <p className="text-xs text-brand-600 dark:text-brand-400">
-                  {supportedLanguages[0] === 'el'
+                  {locale === 'el'
                     ? `Template "${INDUSTRY_TEMPLATES[industry as Industry]?.nameEl}" εφαρμόστηκε. Μπορείτε να προσαρμόσετε τα πεδία.`
                     : `Template "${INDUSTRY_TEMPLATES[industry as Industry]?.nameEn}" applied. You can customize the fields.`}
                 </p>
@@ -286,24 +300,50 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
                       checked={supportedLanguages.includes(lang.code)}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          setSupportedLanguages([...supportedLanguages, lang.code]);
+                          updateSupportedLanguages([...supportedLanguages, lang.code]);
                         } else {
                           // Don't allow removing all languages
                           if (supportedLanguages.length > 1) {
-                            setSupportedLanguages(supportedLanguages.filter((c) => c !== lang.code));
+                            updateSupportedLanguages(supportedLanguages.filter((c) => c !== lang.code));
                           }
                         }
                       }}
                       className="sr-only"
                     />
                     <span className="text-base">{lang.flag}</span>
-                    <span className="truncate">{lang.name}</span>
+                    <span className="truncate">{locale === 'en' ? lang.nameEn : lang.name}</span>
                   </label>
                 ))}
               </div>
               <p className="text-xs text-text-tertiary mt-1">
                 {t.agents.supportedLanguagesHint}
               </p>
+
+              {/* Primary Language selector — shown when 2+ languages selected */}
+              {supportedLanguages.length > 1 && (
+                <div className="mt-2">
+                  <label className="block text-xs font-medium text-text-secondary mb-1">
+                    {t.agents.primaryLanguage}
+                  </label>
+                  <select
+                    value={primaryLanguage}
+                    onChange={(e) => setPrimaryLanguage(e.target.value)}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                  >
+                    {supportedLanguages.map((code) => {
+                      const lang = SUPPORTED_LANGUAGES.find((l) => l.code === code);
+                      return (
+                        <option key={code} value={code}>
+                          {lang?.flag} {locale === 'en' ? lang?.nameEn : lang?.name}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="text-xs text-text-tertiary mt-0.5">
+                    {t.agents.primaryLanguageHint}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Voice + Conversational Test */}

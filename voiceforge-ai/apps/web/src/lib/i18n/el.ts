@@ -297,6 +297,8 @@ export const el: Translations = {
     },
     supportedLanguages: 'Υποστηριζόμενες Γλώσσες',
     supportedLanguagesHint: 'Επιλέξτε ποιες γλώσσες θα υποστηρίζει ο βοηθός. Ο καλών θα εξυπηρετείται στη γλώσσα που μιλάει.',
+    primaryLanguage: 'Κύρια Γλώσσα',
+    primaryLanguageHint: 'Η γλώσσα που θα μιλάει ο βοηθός όταν απαντάει. Αν ο καλών μιλήσει άλλη γλώσσα, θα προσαρμοστεί αυτόματα.',
     languageSelectPlaceholder: 'Επιλέξτε γλώσσες...',
     aiKnowledgeWizard: 'AI Οδηγός Γνώσεων',
     aiKnowledgeWizardDescription: 'Δημιουργήστε αυτόματα ένα αρχείο γνώσεων με τη βοήθεια AI. Απαντήστε ερωτήσεις για την επιχείρησή σας και το AI θα δημιουργήσει δομημένο αρχείο.',

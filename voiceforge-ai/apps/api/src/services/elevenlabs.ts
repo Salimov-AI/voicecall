@@ -75,6 +75,12 @@ export interface CreateAgentParams {
   forwardPhoneNumber?: string;
   /** Languages this agent supports — used for language detection + consistency */
   supportedLanguages?: string[];
+  /** Voice stability (0-1). Higher = more consistent, lower = more expressive */
+  voiceStability?: number;
+  /** Voice similarity boost (0-1). Higher = closer to original voice */
+  voiceSimilarity?: number;
+  /** Voice speed (0.7-1.3). Default 0.95 for natural Greek speech */
+  voiceSpeed?: number;
 }
 
 export interface CreateAgentResult {
@@ -197,6 +203,11 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
         tts: {
           voiceId: params.voiceId,
           modelId: ttsModelId,
+          voiceSettings: {
+            stability: params.voiceStability ?? 0.6,
+            similarityBoost: params.voiceSimilarity ?? 0.8,
+            speed: params.voiceSpeed ?? 0.95,
+          },
         },
         // Turn management: conversational mode allows caller to interrupt the agent naturally
         turn: {
@@ -318,11 +329,16 @@ export async function updateAgent(
     conversationConfig.agent = agentConfig;
   }
 
-  if (updates.voiceId || updates.ttsModel) {
-    conversationConfig.tts = {
-      ...(updates.voiceId ? { voiceId: updates.voiceId } : {}),
-      ...(updates.ttsModel ? { modelId: updates.ttsModel } : {}),
-    };
+  if (updates.voiceId || updates.ttsModel || updates.voiceStability !== undefined || updates.voiceSimilarity !== undefined || updates.voiceSpeed !== undefined) {
+    const ttsConfig: Record<string, unknown> = {};
+    if (updates.voiceId) ttsConfig.voiceId = updates.voiceId;
+    if (updates.ttsModel) ttsConfig.modelId = updates.ttsModel;
+    const voiceSettings: Record<string, number> = {};
+    if (updates.voiceStability !== undefined) voiceSettings.stability = updates.voiceStability;
+    if (updates.voiceSimilarity !== undefined) voiceSettings.similarityBoost = updates.voiceSimilarity;
+    if (updates.voiceSpeed !== undefined) voiceSettings.speed = updates.voiceSpeed;
+    if (Object.keys(voiceSettings).length > 0) ttsConfig.voiceSettings = voiceSettings;
+    conversationConfig.tts = ttsConfig;
   }
 
   // Always ensure conversational turn mode is set (allows interruption)
@@ -599,7 +615,7 @@ export async function listVoices(): Promise<Array<{ voiceId: string; name: strin
 export async function generateVoicePreview(
   voiceId: string,
   text: string,
-  modelId: string = 'eleven_flash_v2_5',
+  modelId: string = 'eleven_v3_conversational',
 ): Promise<ArrayBuffer> {
   if (!isConfigured()) {
     throw new Error('ElevenLabs not configured');

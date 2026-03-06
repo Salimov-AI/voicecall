@@ -22,7 +22,7 @@ voiceRoutes.use('*', authMiddleware);
 const previewSchema = z.object({
   voiceId: z.string().min(1),
   text: z.string().min(1).max(500).default('Γεια σας, καλωσορίσατε. Πώς μπορώ να σας βοηθήσω σήμερα;'),
-  modelId: z.string().optional().default('eleven_flash_v2_5'),
+  modelId: z.string().optional().default('eleven_v3_conversational'),
 });
 
 // ═══════════════════════════════════════════════════════════════════

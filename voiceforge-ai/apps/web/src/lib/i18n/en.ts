@@ -297,6 +297,8 @@ export const en: Translations = {
     },
     supportedLanguages: 'Supported Languages',
     supportedLanguagesHint: 'Choose which languages the assistant supports. Callers will be served in the language they speak.',
+    primaryLanguage: 'Primary Language',
+    primaryLanguageHint: 'The language the assistant speaks when answering. If the caller speaks another language, it will adapt automatically.',
     languageSelectPlaceholder: 'Select languages...',
     aiKnowledgeWizard: 'AI Knowledge Wizard',
     aiKnowledgeWizardDescription: 'Automatically create a knowledge file with AI assistance. Answer questions about your business and AI will generate a structured file.',
