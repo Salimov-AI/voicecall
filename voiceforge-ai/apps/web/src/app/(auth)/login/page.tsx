@@ -43,7 +43,10 @@ export default function LoginPage() {
         }
         setDevToken(result.data.access_token);
         toast.success(`${t.auth.loginSuccess} (Dev Mode)`);
-        router.push('/dashboard');
+
+        // Redirect to onboarding if user has no profile or hasn't completed it
+        const needsOnboarding = !result.data.hasProfile || !result.data.onboardingCompleted;
+        router.push(needsOnboarding ? '/onboarding' : '/dashboard');
         return;
       }
 

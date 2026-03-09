@@ -7,7 +7,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api-client';
+import { api, ApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth-store';
 import { toast } from 'sonner';
 import type { Industry, Plan, ApiResponse, CustomerProfile } from '@voiceforge/shared';
@@ -100,22 +100,26 @@ export default function OnboardingPage() {
     setIsSubmitting(true);
     try {
       // 1. Register customer (creates DB record — no external API needed)
-      const registerResult = await api.post<ApiResponse<CustomerProfile>>('/api/customers/register', {
-        businessName: data.businessName,
-        industry: data.industry,
-        ownerName: data.ownerName,
-        email: data.email,
-        phone: data.phone,
-        plan: data.plan,
-        timezone: data.timezone,
-      });
-
-      if (!registerResult.success) {
-        toast.error(t.onboarding.accountCreateError);
-        return;
+      // If customer already exists (409), continue — they may have registered via dev auth
+      try {
+        const registerResult = await api.post<ApiResponse<CustomerProfile>>('/api/customers/register', {
+          businessName: data.businessName,
+          industry: data.industry,
+          ownerName: data.ownerName,
+          email: data.email,
+          phone: data.phone,
+          plan: data.plan,
+          timezone: data.timezone,
+        });
+        toast.success(t.onboarding.accountCreated);
+      } catch (regErr) {
+        if (regErr instanceof ApiError && regErr.status === 409) {
+          // Customer already exists — continue silently
+        } else {
+          toast.error(t.onboarding.accountCreateError);
+          return;
+        }
       }
-
-      toast.success(t.onboarding.accountCreated);
 
       // 2. Create the AI agent (reuse preview ElevenLabs agent if exists)
       const agentResult = await api.post<ApiResponse<{ id: string }>>('/api/agents', {

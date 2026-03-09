@@ -142,7 +142,10 @@ pnpm db:push
 docker exec -i voiceforge-postgres psql -U voiceforge -d voiceforge < docker/migrations/0002_add_user_role.sql
 docker exec -i voiceforge-postgres psql -U voiceforge -d voiceforge < docker/migrations/0003_add_caller_memories.sql
 docker exec -i voiceforge-postgres psql -U voiceforge -d voiceforge < docker/migrations/0003_add_license_keys.sql
+docker exec -i voiceforge-postgres psql -U voiceforge -d voiceforge < docker/migrations/0003_add_voice_settings.sql
+docker exec -i voiceforge-postgres psql -U voiceforge -d voiceforge < docker/migrations/0003_rename_plan_enum.sql
 docker exec -i voiceforge-postgres psql -U voiceforge -d voiceforge < docker/migrations/0004_add_supported_languages.sql
+docker exec -i voiceforge-postgres psql -U voiceforge -d voiceforge < docker/migrations/0004_add_widget_config.sql
 docker exec -i voiceforge-postgres psql -U voiceforge -d voiceforge < docker/migrations/0005_add_customer_records.sql
 ```
 
@@ -170,6 +173,19 @@ pnpm dev:web    # Frontend only (port 3000)
 In development mode (`NEXT_PUBLIC_DEV_AUTH=true`), the app uses JWT-based auth instead of Supabase. You can register and login at:
 - http://localhost:3000/login
 - http://localhost:3000/register
+
+> **Note:** After login, new users are automatically redirected to the onboarding wizard to create their first agent.
+
+## Webhook Tools (Appointments, Caller Memory)
+
+AI agents use server-side webhook tools (appointment booking, caller history, business hours). These require ElevenLabs to reach your API server.
+
+- **Local dev:** Webhook tools won't work because ElevenLabs can't reach `localhost`. The agent's voice conversation still works.
+- **For full testing with webhooks**, use ngrok:
+  ```bash
+  ngrok http 3001
+  ```
+  Then set `API_BASE_URL` in `.env` to the ngrok URL (e.g., `https://abc123.ngrok-free.app`).
 
 ## Database Schema (12 Tables)
 
