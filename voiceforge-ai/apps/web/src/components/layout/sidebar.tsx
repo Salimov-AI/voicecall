@@ -70,7 +70,7 @@ export function Sidebar() {
       clearDevToken();
     }
     const supabase = createClient();
-    await supabase.auth.signOut();
+    await supabase?.auth.signOut();
     reset();
     toast.success(t.auth.logoutSuccess);
     router.push('/login');

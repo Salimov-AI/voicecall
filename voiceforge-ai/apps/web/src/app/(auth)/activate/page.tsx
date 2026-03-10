@@ -164,7 +164,7 @@ export default function ActivatePage() {
             onKeyDown={(e) => e.key === 'Enter' && handleActivate()}
             placeholder="VF-XXXX-XXXX-XXXX"
             className="w-full px-4 py-3 text-lg font-mono tracking-widest text-center border border-border rounded-xl bg-surface text-text-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition placeholder:text-text-tertiary"
-            maxLength={16}
+            maxLength={19}
           />
         </div>
 

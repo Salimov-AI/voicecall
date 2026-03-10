@@ -77,14 +77,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // ── Supabase Auth Mode (Production) ────────────────────────
+    if (!supabase) {
+      setLoading(false);
+      setInitialized(true);
+      return;
+    }
+
     api.setTokenProvider(async () => {
-      const { data } = await supabase!.auth.getSession();
+      const { data } = await supabase.auth.getSession();
       return data.session?.access_token ?? null;
     });
 
-    // Get initial session
     const initAuth = async () => {
-      const { data: { session } } = await supabase!.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -98,8 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initAuth();
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase!.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
 
