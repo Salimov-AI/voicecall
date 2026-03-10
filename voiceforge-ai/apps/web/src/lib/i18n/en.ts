@@ -633,6 +633,9 @@ export const en: Translations = {
     widgetActive: 'Widget active — Press the button to chat',
     pressButton: 'Press the microphone button on the widget to start a conversation.',
     voiceResponse: 'The assistant will respond with voice in Greek.',
+    savingConversation: 'Saving conversation...',
+    conversationRecorded: 'Conversation recorded successfully!',
+    appointmentDetected: 'Appointment detected and added to calendar!',
   },
 
   // ── Calendar ───────────────────────────────────────────────────

@@ -8,10 +8,11 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { eq, and, gte, lte, desc, sql, count, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { customers, calls, agents, appointments } from '../db/schema/index.js';
+import { customers, calls, agents, appointments, webhookEvents } from '../db/schema/index.js';
 import { authMiddleware, type AuthUser } from '../middleware/auth.js';
 import { createLogger } from '../config/logger.js';
-import { getMonthRangeInTimezone } from '../services/timezone.js';
+import { getMonthRangeInTimezone, parseDateTimeInTimezone } from '../services/timezone.js';
+import * as elevenlabsService from '../services/elevenlabs.js';
 import type { ApiResponse } from '@voiceforge/shared';
 
 const log = createLogger('calls');
@@ -553,6 +554,262 @@ callRoutes.delete('/e2e-test', async (c) => {
   log.info({ count: result.length, customerId: customer.id }, '🗑️ All E2E test calls + appointments deleted');
 
   return c.json<ApiResponse>({ success: true, data: { deletedCount: result.length } });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// POST /calls/record-conversation — Record a REAL widget conversation
+// After a live chat via the ElevenLabs widget, the frontend calls this
+// with the ElevenLabs agent ID. We fetch the latest conversation from
+// the ElevenLabs API and store it as a real call record with transcript,
+// summary, sentiment and appointment (if detected).
+// ═══════════════════════════════════════════════════════════════════
+
+const recordConversationSchema = z.object({
+  elevenlabsAgentId: z.string().min(1),
+});
+
+callRoutes.post('/record-conversation', zValidator('json', recordConversationSchema), async (c) => {
+  const user = c.get('user');
+  const { elevenlabsAgentId } = c.req.valid('json');
+
+  const customer = await db.query.customers.findFirst({
+    where: eq(customers.userId, user.sub),
+  });
+  if (!customer) {
+    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Customer not found' } }, 404);
+  }
+
+  // Find the agent in our DB by ElevenLabs agent ID
+  const agent = await db.query.agents.findFirst({
+    where: and(eq(agents.elevenlabsAgentId, elevenlabsAgentId), eq(agents.customerId, customer.id)),
+  });
+  if (!agent) {
+    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Agent not found' } }, 404);
+  }
+
+  if (!elevenlabsService.isConfigured()) {
+    return c.json<ApiResponse>({ success: false, error: { code: 'SERVICE_UNAVAILABLE', message: 'ElevenLabs not configured' } }, 503);
+  }
+
+  try {
+    // Fetch recent conversations for this agent from ElevenLabs
+    const conversations = await elevenlabsService.getConversations(elevenlabsAgentId);
+    if (!conversations || conversations.length === 0) {
+      return c.json<ApiResponse>({ success: true, data: null });
+    }
+
+    // Pick the most recent conversation
+    const latest = conversations[0] as Record<string, any>;
+    const conversationId = latest.conversation_id as string;
+    if (!conversationId) {
+      return c.json<ApiResponse>({ success: true, data: null });
+    }
+
+    // Dedup: skip if already recorded
+    const existing = await db.query.webhookEvents.findFirst({
+      where: eq(webhookEvents.eventId, conversationId),
+    });
+    if (existing) {
+      log.info({ conversationId }, 'Conversation already recorded — skipping');
+      return c.json<ApiResponse>({ success: true, data: { alreadyRecorded: true } });
+    }
+
+    // Fetch full conversation details from ElevenLabs
+    const full = await elevenlabsService.getConversation(conversationId) as Record<string, any>;
+    const transcript: Array<{ role: string; message?: string; time_in_call_secs?: number; timeInCallSecs?: number }> =
+      full.transcript ?? [];
+    const analysis = full.analysis as Record<string, any> | undefined;
+    const metadata = full.metadata as Record<string, any> | undefined;
+
+    // Build formatted transcript text
+    const agentDisplayName = agent.name || 'AI Assistant';
+    let transcriptText = '';
+    if (transcript.length > 0) {
+      transcriptText = transcript
+        .filter((msg) => msg.message)
+        .map((msg) => {
+          const role = msg.role === 'agent' ? agentDisplayName : 'Πελάτης';
+          return `[${role}]: ${msg.message}`;
+        })
+        .join('\n');
+    }
+
+    if (!transcriptText) {
+      log.info({ conversationId }, 'Conversation has no transcript — skipping');
+      return c.json<ApiResponse>({ success: true, data: null });
+    }
+
+    // Calculate duration
+    const durationSeconds = Math.ceil(
+      metadata?.call_duration_secs ??
+      metadata?.callDurationSecs ??
+      (transcript.length > 0
+        ? (transcript[transcript.length - 1]?.time_in_call_secs ?? transcript[transcript.length - 1]?.timeInCallSecs ?? 0)
+        : 0)
+    );
+
+    // Extract analysis data (SDK returns camelCase)
+    const summary = analysis?.transcriptSummary ?? analysis?.transcript_summary ?? null;
+    const callSuccessful = analysis?.callSuccessful ?? analysis?.call_successful;
+    const dataCollectionResults = analysis?.dataCollectionResults ?? analysis?.data_collection_results ?? {};
+    const extractedData: Record<string, string> = {};
+    if (dataCollectionResults && typeof dataCollectionResults === 'object') {
+      for (const [key, val] of Object.entries(dataCollectionResults)) {
+        const v = val as Record<string, any>;
+        if (v?.value !== undefined && v.value !== null) {
+          extractedData[key] = String(v.value);
+        }
+      }
+    }
+
+    // Sentiment
+    const sentimentScore = callSuccessful === 'success' || callSuccessful === 'true' ? 5 :
+                           callSuccessful === 'failure' || callSuccessful === 'false' ? 2 : 4;
+
+    // Appointment detection
+    let appointmentBooked = !!(extractedData.appointment_date || extractedData.appointment_time);
+    let appointmentDate = extractedData.appointment_date ?? null;
+    let appointmentTime = extractedData.appointment_time ?? '09:00';
+    let appointmentCallerName = extractedData.caller_name ?? null;
+    let appointmentCallerPhone = extractedData.caller_phone ?? 'widget';
+    let appointmentNotes = extractedData.appointment_notes ?? null;
+
+    // Smart extraction from transcript (same logic as webhook handler)
+    if (!appointmentBooked && transcriptText) {
+      const lowerTranscript = transcriptText.toLowerCase();
+      const appointmentKeywords = [
+        'ραντεβού', 'ραντεβου', 'appointment',
+        'θα σας καλέσ', 'θα σε καλέσ', 'θα καλέσ',
+        'θα επικοινωνήσ', 'θα σας πάρ', 'will call',
+        'callback', 'call back', 'call you back',
+      ];
+      const hasAppointmentIntent = appointmentKeywords.some((kw) => lowerTranscript.includes(kw));
+
+      if (hasAppointmentIntent) {
+        appointmentBooked = true;
+
+        // Extract date from transcript
+        const datePatterns = [
+          /αύριο|αυριο|tomorrow/i,
+          /μεθαύριο|μεθαυριο|day after tomorrow/i,
+          /(?:στις?\s+)?(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?/,
+        ];
+        for (const pattern of datePatterns) {
+          const match = transcriptText.match(pattern);
+          if (match) {
+            if (/αύριο|αυριο|tomorrow/i.test(match[0])) {
+              const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+              appointmentDate = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+            } else if (/μεθαύριο|μεθαυριο|day after tomorrow/i.test(match[0])) {
+              const d = new Date(); d.setDate(d.getDate() + 2);
+              appointmentDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            }
+            break;
+          }
+        }
+
+        // Extract time from transcript
+        const timeMatch = transcriptText.match(/(?:στις?\s+)?(\d{1,2})[:\.](\d{2})(?:\s*(?:μμ|μ\.μ\.|pm))?/i);
+        if (timeMatch?.[1] && timeMatch[2]) {
+          appointmentTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+        }
+
+        // Extract phone number
+        const phoneMatch = transcriptText.match(/(69\d{8}|2\d{9}|\+30\d{10})/);
+        if (phoneMatch?.[1]) appointmentCallerPhone = phoneMatch[1];
+
+        // Extract caller name
+        const nameMatch = transcriptText.match(/(?:ονομάζομαι|λέγομαι|με λένε|my name is|i'm|i am)\s+([Α-Ωα-ωA-Za-z]+)/i);
+        if (nameMatch?.[1]) appointmentCallerName = nameMatch[1];
+
+        if (!appointmentNotes) appointmentNotes = summary ?? transcriptText.slice(0, 300);
+      }
+    }
+
+    // Compute start time from conversation metadata
+    const startTimeUnix = metadata?.start_time_unix_secs ?? metadata?.startTimeUnixSecs;
+    const startedAt = startTimeUnix ? new Date(startTimeUnix * 1000) : new Date(Date.now() - durationSeconds * 1000);
+    const endedAt = new Date(startedAt.getTime() + durationSeconds * 1000);
+
+    const intentCategory = appointmentBooked ? 'appointment_booking' : 'inquiry';
+
+    // Insert call record
+    const [callRecord] = await db.insert(calls).values({
+      customerId: customer.id,
+      agentId: agent.id,
+      telnyxConversationId: conversationId,
+      callerNumber: 'widget',
+      agentNumber: agent.phoneNumber || 'widget',
+      direction: 'inbound',
+      status: 'completed',
+      startedAt,
+      endedAt,
+      durationSeconds,
+      transcript: transcriptText,
+      summary,
+      sentiment: sentimentScore,
+      intentCategory,
+      appointmentBooked,
+      insightsRaw: { analysis, metadata: metadata as Record<string, unknown>, extractedData, source: 'widget-recording' },
+      metadata: { isWidgetTest: true, recordedBy: 'record-conversation' },
+    }).returning();
+
+    if (!callRecord) {
+      return c.json<ApiResponse>({ success: false, error: { code: 'INSERT_FAILED', message: 'Failed to create call record' } }, 500);
+    }
+
+    // Log webhook event for dedup
+    await db.insert(webhookEvents).values({
+      eventId: conversationId,
+      eventType: 'widget.record_conversation',
+      source: 'widget',
+      payload: { conversationId, agentId: elevenlabsAgentId, source: 'record-conversation' },
+    });
+
+    // Create appointment if detected
+    if (appointmentBooked) {
+      try {
+        const customerTz = customer.timezone || 'Europe/Athens';
+        const scheduledAt = appointmentDate
+          ? parseDateTimeInTimezone(appointmentDate, appointmentTime, customerTz)
+          : new Date();
+
+        await db.insert(appointments).values({
+          customerId: customer.id,
+          agentId: agent.id,
+          callId: callRecord.id,
+          callerName: appointmentCallerName ?? 'Widget caller',
+          callerPhone: appointmentCallerPhone,
+          scheduledAt,
+          notes: appointmentNotes ?? summary ?? null,
+          status: 'pending',
+        });
+        log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment created from widget conversation');
+      } catch (aptErr) {
+        log.error({ error: aptErr, callId: callRecord.id }, 'Failed to create appointment from widget conversation');
+      }
+    }
+
+    log.info(
+      { callId: callRecord.id, conversationId, agentId: agent.id, duration: durationSeconds, hasAppointment: appointmentBooked },
+      '📞 Widget conversation recorded',
+    );
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        id: callRecord.id,
+        conversationId,
+        durationSeconds,
+        summary,
+        appointmentBooked,
+        startedAt: startedAt.toISOString(),
+      },
+    }, 201);
+  } catch (error) {
+    log.error({ error, elevenlabsAgentId }, 'Failed to record widget conversation');
+    return c.json<ApiResponse>({ success: false, error: { code: 'FETCH_FAILED', message: 'Failed to fetch conversation from ElevenLabs' } }, 500);
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════

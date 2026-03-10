@@ -1,14 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════
 // VoiceForge AI — Agent Test Widget (ElevenLabs Conversational AI)
 // Embeds the ElevenLabs widget to test agents via browser microphone
+// Records the real conversation transcript on close
 // ═══════════════════════════════════════════════════════════════════
 
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { X, Mic, Phone, AlertCircle } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { X, Mic, Phone, AlertCircle, Loader2 } from 'lucide-react';
 import { Button, Spinner } from '@/components/ui';
 import { useI18n } from '@/lib/i18n';
+import { api } from '@/lib/api-client';
+import { toast } from 'sonner';
+import type { ApiResponse } from '@voiceforge/shared';
 
 interface AgentTestWidgetProps {
   agentId: string; // ElevenLabs agent ID
@@ -23,8 +27,10 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
   const [isScriptLoaded, setIsScriptLoaded] = useState(false);
   const [scriptError, setScriptError] = useState(false);
   const [micPermission, setMicPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
+  const [isRecording, setIsRecording] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetContainerRef = useRef<HTMLDivElement>(null);
+  const widgetMountedRef = useRef(false);
 
   // Load the ElevenLabs widget script
   useEffect(() => {
@@ -64,6 +70,7 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
       el.setAttribute('agent-id', agentId);
       widgetContainerRef.current.innerHTML = '';
       widgetContainerRef.current.appendChild(el);
+      widgetMountedRef.current = true;
     }, 50);
 
     return () => {
@@ -91,6 +98,39 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
     checkMic();
   }, []);
 
+  // Record the conversation when widget closes
+  const handleClose = useCallback(async () => {
+    if (!widgetMountedRef.current) {
+      onClose();
+      return;
+    }
+
+    setIsRecording(true);
+
+    // Small delay to let ElevenLabs finalize the conversation
+    await new Promise((r) => setTimeout(r, 3000));
+
+    try {
+      const result = await api.post<ApiResponse<{ id?: string; summary?: string; appointmentBooked?: boolean; alreadyRecorded?: boolean } | null>>(
+        '/api/calls/record-conversation',
+        { elevenlabsAgentId: agentId },
+      );
+
+      if (result.success && result.data && !('alreadyRecorded' in result.data)) {
+        toast.success(t.testWidget.conversationRecorded);
+        if (result.data.appointmentBooked) {
+          toast.success(t.testWidget.appointmentDetected);
+        }
+      }
+    } catch (err) {
+      // Non-critical — don't block user from closing
+      console.warn('Failed to record conversation:', err);
+    } finally {
+      setIsRecording(false);
+      onClose();
+    }
+  }, [agentId, onClose, t]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
       <div className="bg-surface rounded-2xl shadow-modal w-full max-w-lg overflow-hidden">
@@ -110,8 +150,9 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
             </div>
           </div>
           <button
-            onClick={onClose}
-            className="p-1 rounded-lg hover:bg-surface-tertiary text-text-tertiary"
+            onClick={handleClose}
+            disabled={isRecording}
+            className="p-1 rounded-lg hover:bg-surface-tertiary text-text-tertiary disabled:opacity-50"
           >
             <X className="w-5 h-5" />
           </button>
@@ -119,8 +160,16 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
 
         {/* Body */}
         <div className="p-6" ref={containerRef}>
+          {/* Recording in progress */}
+          {isRecording && (
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
+              <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+              <p className="text-sm text-text-secondary font-medium">{t.testWidget.savingConversation}</p>
+            </div>
+          )}
+
           {/* Microphone denied warning */}
-          {micPermission === 'denied' && (
+          {!isRecording && micPermission === 'denied' && (
             <div className="flex items-start gap-3 p-4 mb-4 rounded-lg bg-warning-50 border border-warning-200">
               <AlertCircle className="w-5 h-5 text-warning-500 shrink-0 mt-0.5" />
               <div>
@@ -135,7 +184,7 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
           )}
 
           {/* Script loading */}
-          {!isScriptLoaded && !scriptError && (
+          {!isRecording && !isScriptLoaded && !scriptError && (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
               <Spinner size="lg" />
               <p className="text-sm text-text-tertiary">{t.testWidget.loadingWidget}</p>
@@ -143,7 +192,7 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
           )}
 
           {/* Script error */}
-          {scriptError && (
+          {!isRecording && scriptError && (
             <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
               <AlertCircle className="w-10 h-10 text-danger-400" />
               <p className="text-sm text-danger-600 font-medium">
@@ -163,7 +212,7 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
           )}
 
           {/* ElevenLabs widget */}
-          {isScriptLoaded && !scriptError && (
+          {!isRecording && isScriptLoaded && !scriptError && (
             <div className="flex flex-col items-center gap-4">
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
                 <Mic className="w-3.5 h-3.5" />
@@ -186,8 +235,8 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border flex justify-end">
-          <Button variant="outline" onClick={onClose}>
-            {t.common.close}
+          <Button variant="outline" onClick={handleClose} disabled={isRecording}>
+            {isRecording ? t.testWidget.savingConversation : t.common.close}
           </Button>
         </div>
       </div>

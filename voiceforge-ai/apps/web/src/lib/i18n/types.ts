@@ -577,6 +577,9 @@ export interface Translations {
     widgetActive: string;
     pressButton: string;
     voiceResponse: string;
+    savingConversation: string;
+    conversationRecorded: string;
+    appointmentDetected: string;
   };
   // ── Calendar ───────────────────────────────────────────────────
   calendar: {
