@@ -8,6 +8,7 @@ export {
   customersRelations,
   industryEnum,
   planEnum,
+  userRoleEnum,
   type CustomerSelect,
   type CustomerInsert,
 } from './customers';
@@ -87,3 +88,10 @@ export {
   type PendingRegistrationSelect,
   type PendingRegistrationInsert,
 } from './pending-registrations';
+
+export {
+  customerRecords,
+  customerRecordsRelations,
+  type CustomerRecordSelect,
+  type CustomerRecordInsert,
+} from './customer-records';
