@@ -6,7 +6,7 @@
 
 import { pgTable, uuid, text, boolean, timestamp, integer, jsonb } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { customers } from './customers.js';
+import { customers } from './customers';
 
 // ── Table ────────────────────────────────────────────────────────
 
