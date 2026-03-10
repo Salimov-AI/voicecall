@@ -137,89 +137,42 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
                        payload.status === 'error' ? 'failed' :
                        payload.status === 'timeout' ? 'missed' : 'completed';
 
-    // Extract analysis data
+    // Extract AI analysis data — with dataCollection configured, ElevenLabs AI
+    // provides structured extraction (caller name, appointment date/time, intent, etc.)
     const summary = payload.analysis?.transcript_summary ?? null;
-    const extractedData = payload.analysis?.data_collection ?? {};
+    const rawDataCollection = payload.analysis?.data_collection ?? {};
     const callSuccessful = payload.analysis?.call_successful;
 
-    // Check if an appointment was booked (from analysis OR transcript patterns)
-    let appointmentBooked = !!(extractedData.appointment_date || extractedData.appointment_time);
-    let appointmentDate = extractedData.appointment_date ?? null;
-    let appointmentTime = extractedData.appointment_time ?? '09:00';
-    let appointmentCallerName = extractedData.caller_name ?? null;
-    let appointmentCallerPhone = extractedData.caller_phone ?? callerNumber;
-    let appointmentNotes = extractedData.appointment_notes ?? null;
-
-    // ── Smart Extraction from Transcript ───────────────────────
-    // If ElevenLabs analysis didn't provide appointment data,
-    // parse the transcript for common patterns
-    if (!appointmentBooked && transcriptText) {
-      const lowerTranscript = transcriptText.toLowerCase();
-
-      // Detect appointment intent from keywords
-      const appointmentKeywords = [
-        'ραντεβού', 'ραντεβου', 'appointment',
-        'θα σας καλέσ', 'θα σε καλέσ', 'θα καλέσ',
-        'θα επικοινωνήσ', 'θα σας πάρ', 'will call',
-        'callback', 'call back', 'call you back',
-      ];
-      const hasAppointmentIntent = appointmentKeywords.some((kw) => lowerTranscript.includes(kw));
-
-      if (hasAppointmentIntent) {
-        appointmentBooked = true;
-
-        // Try to extract date from transcript
-        const datePatterns = [
-          /αύριο|αυριο|tomorrow/i,
-          /μεθαύριο|μεθαυριο|day after tomorrow/i,
-          /(?:στις?\s+)?(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?/,
-          /(\d{1,2})\s+(?:ιανουαρίου|φεβρουαρίου|μαρτίου|απριλίου|μαΐου|ιουνίου|ιουλίου|αυγούστου|σεπτεμβρίου|οκτωβρίου|νοεμβρίου|δεκεμβρίου|january|february|march|april|may|june|july|august|september|october|november|december)/i,
-        ];
-
-        for (const pattern of datePatterns) {
-          const match = transcriptText.match(pattern);
-          if (match) {
-            if (/αύριο|αυριο|tomorrow/i.test(match[0])) {
-              const tomorrow = new Date();
-              tomorrow.setDate(tomorrow.getDate() + 1);
-              appointmentDate = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
-            } else if (/μεθαύριο|μεθαυριο|day after tomorrow/i.test(match[0])) {
-              const dayAfter = new Date();
-              dayAfter.setDate(dayAfter.getDate() + 2);
-              appointmentDate = `${dayAfter.getFullYear()}-${String(dayAfter.getMonth() + 1).padStart(2, '0')}-${String(dayAfter.getDate()).padStart(2, '0')}`;
-            }
-            break;
-          }
+    // Normalize data collection values (may come as { value: "..." } objects or direct strings)
+    const extractedData: Record<string, string> = {};
+    for (const [key, val] of Object.entries(rawDataCollection)) {
+      if (val && typeof val === 'object' && 'value' in (val as any)) {
+        const v = (val as any).value;
+        if (v !== undefined && v !== null && String(v).trim() !== '') {
+          extractedData[key] = String(v);
         }
-
-        // Try to extract time from transcript
-        const timeMatch = transcriptText.match(/(?:στις?\s+)?(\d{1,2})[:\.](\d{2})(?:\s*(?:μμ|μ\.μ\.|pm))?/i);
-        if (timeMatch?.[1] && timeMatch[2]) {
-          appointmentTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
-        }
-
-        // Try to extract phone number
-        const phoneMatch = transcriptText.match(/(69\d{8}|2\d{9}|\+30\d{10})/);
-        if (phoneMatch?.[1]) {
-          appointmentCallerPhone = phoneMatch[1];
-        }
-
-        // Try to extract caller name from transcript lines
-        const nameMatch = transcriptText.match(/(?:ονομάζομαι|λέγομαι|με λένε|my name is|i'm|i am)\s+([Α-Ωα-ωA-Za-z]+)/i);
-        if (nameMatch?.[1]) {
-          appointmentCallerName = nameMatch[1];
-        }
-
-        // Build appointment notes from relevant transcript context
-        if (!appointmentNotes) {
-          appointmentNotes = summary ?? transcriptText.slice(0, 300);
-        }
+      } else if (typeof val === 'string' && val.trim()) {
+        extractedData[key] = val;
       }
     }
 
+    // Use AI-extracted data (works for both Greek and English)
+    const appointmentBooked = !!(extractedData.appointment_date || extractedData.appointment_time);
+    const appointmentDate = extractedData.appointment_date ?? null;
+    const appointmentTime = extractedData.appointment_time ?? '09:00';
+    const appointmentCallerName = extractedData.caller_name ?? null;
+    const appointmentCallerPhone = extractedData.caller_phone ?? callerNumber;
+    const appointmentReason = extractedData.appointment_reason ?? null;
+    const callerIntent = extractedData.caller_intent ?? (appointmentBooked ? 'appointment_booking' : null);
+
+    log.info(
+      { conversationId, extractedData, appointmentBooked },
+      'AI-extracted data from webhook',
+    );
+
     // Compute sentiment (1-5 scale)
-    const sentimentScore = callSuccessful === 'true' ? 5 :
-                           callSuccessful === 'false' ? 2 : null;
+    const sentimentScore = callSuccessful === 'true' || callSuccessful === 'success' ? 5 :
+                           callSuccessful === 'false' || callSuccessful === 'failure' ? 2 : null;
 
     // ── Dedup: Check if Telnyx already created a call record ────
     // When both Telnyx and ElevenLabs webhooks fire for the same
@@ -243,7 +196,7 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
           transcript: transcriptText || existingCall.transcript,
           summary: summary ?? existingCall.summary,
           sentiment: sentimentScore ?? existingCall.sentiment,
-          intentCategory: extractedData.intent ?? extractedData.reason ?? existingCall.intentCategory,
+          intentCategory: callerIntent ?? existingCall.intentCategory,
           appointmentBooked,
           durationSeconds: durationSeconds || existingCall.durationSeconds,
           status: callStatus as any,
@@ -273,7 +226,7 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
         telnyxEventId: conversationId,
         summary,
         sentiment: sentimentScore,
-        intentCategory: extractedData.intent ?? extractedData.reason ?? null,
+        intentCategory: callerIntent,
         appointmentBooked,
         insightsRaw: {
           analysis: payload.analysis,
@@ -336,7 +289,7 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
       }
     }
 
-    // ── Store Appointment if Booked ─────────────────────────────
+    // ── Store Appointment if Booked — with slot conflict resolution ──
     if (appointmentBooked && callRecord) {
       try {
         const aptDate = appointmentDate;
@@ -344,9 +297,32 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
 
         // Use customer timezone for proper UTC conversion
         const customerTz = customer?.timezone || 'Europe/Athens';
-        const scheduledAt = aptDate
+        let scheduledAt = aptDate
           ? parseDateTimeInTimezone(aptDate, aptTime, customerTz)
           : new Date();
+
+        // Check for slot conflicts: find existing appointments within ±30 minutes
+        const slotStart = new Date(scheduledAt.getTime() - 30 * 60 * 1000);
+        const slotEnd = new Date(scheduledAt.getTime() + 30 * 60 * 1000);
+        const conflicting = await db.query.appointments.findMany({
+          where: and(
+            eq(appointments.customerId, agent.customerId),
+            gte(appointments.scheduledAt, slotStart),
+            lte(appointments.scheduledAt, slotEnd),
+          ),
+          orderBy: [desc(appointments.scheduledAt)],
+        });
+
+        if (conflicting.length > 0) {
+          // Slot taken — move appointment after the last conflict
+          const lastConflict = conflicting[0]!;
+          const conflictEnd = new Date(lastConflict.scheduledAt.getTime() + (lastConflict.durationMinutes || 30) * 60 * 1000);
+          scheduledAt = conflictEnd;
+          log.info(
+            { originalSlot: `${aptDate} ${aptTime}`, movedTo: scheduledAt.toISOString(), conflicts: conflicting.length },
+            'Appointment slot conflict — moved to next available slot',
+          );
+        }
 
         await db.insert(appointments).values({
           customerId: agent.customerId,
@@ -355,7 +331,7 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
           callerName: appointmentCallerName ?? callerNumber,
           callerPhone: appointmentCallerPhone,
           scheduledAt,
-          notes: appointmentNotes ?? summary ?? null,
+          notes: appointmentReason ?? summary ?? null,
           status: 'pending',
         });
         log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment record created from post-call data');
@@ -375,10 +351,10 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
         // Extract key facts from the call's extracted data
         const newFacts: string[] = [];
         if (extractedData.caller_name) newFacts.push(`Όνομα: ${extractedData.caller_name}`);
-        if (extractedData.service_type) newFacts.push(`Ενδιαφέρον: ${extractedData.service_type}`);
-        if (extractedData.reason) newFacts.push(`Λόγος κλήσης: ${extractedData.reason}`);
-        if (extractedData.intent) newFacts.push(`Πρόθεση: ${extractedData.intent}`);
+        if (extractedData.appointment_reason) newFacts.push(`Ενδιαφέρον: ${extractedData.appointment_reason}`);
+        if (extractedData.caller_intent) newFacts.push(`Πρόθεση: ${extractedData.caller_intent}`);
         if (appointmentBooked) newFacts.push(`Κλείστηκε ραντεβού`);
+        if (appointmentDate) newFacts.push(`Ραντεβού: ${appointmentDate} ${appointmentTime}`);
 
         // Check if a memory already exists for this caller
         const existingMemory = await db.query.callerMemories.findFirst({
@@ -402,8 +378,9 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
           const existingPrefs = (existingMemory.preferences as Record<string, unknown>) || {};
           const newPrefs = {
             ...existingPrefs,
-            ...(extractedData.service_type ? { last_service_interest: extractedData.service_type } : {}),
-            ...(extractedData.preferred_time ? { preferred_time: extractedData.preferred_time } : {}),
+            ...(extractedData.appointment_reason ? { last_service_interest: extractedData.appointment_reason } : {}),
+            ...(extractedData.appointment_time ? { preferred_time: extractedData.appointment_time } : {}),
+            ...(extractedData.caller_intent ? { last_intent: extractedData.caller_intent } : {}),
           };
 
           // Compute rolling average sentiment
@@ -444,7 +421,8 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
             summary: `[Κλήση #1]: ${memorySummary}`,
             keyFacts: newFacts,
             preferences: {
-              ...(extractedData.service_type ? { last_service_interest: extractedData.service_type } : {}),
+              ...(extractedData.appointment_reason ? { last_service_interest: extractedData.appointment_reason } : {}),
+              ...(extractedData.caller_intent ? { last_intent: extractedData.caller_intent } : {}),
             },
             overallSentiment: sentimentScore,
             lastSentiment: sentimentScore,

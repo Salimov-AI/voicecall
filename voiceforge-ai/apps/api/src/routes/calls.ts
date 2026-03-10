@@ -648,97 +648,58 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
         : 0)
     );
 
-    // Extract analysis data (SDK returns camelCase)
+    // Extract analysis data — ElevenLabs AI provides structured extraction
     const summary = analysis?.transcriptSummary ?? analysis?.transcript_summary ?? null;
     const callSuccessful = analysis?.callSuccessful ?? analysis?.call_successful;
+
+    // Extract AI-collected data from dataCollectionResults
     const dataCollectionResults = analysis?.dataCollectionResults ?? analysis?.data_collection_results ?? {};
     const extractedData: Record<string, string> = {};
     if (dataCollectionResults && typeof dataCollectionResults === 'object') {
       for (const [key, val] of Object.entries(dataCollectionResults)) {
         const v = val as Record<string, any>;
-        if (v?.value !== undefined && v.value !== null) {
+        if (v?.value !== undefined && v.value !== null && String(v.value).trim() !== '') {
           extractedData[key] = String(v.value);
         }
       }
     }
 
+    // Check evaluation criteria results (AI-determined)
+    const evalResults = analysis?.evaluationCriteriaResults ?? analysis?.evaluation_criteria_results ?? {};
+    const appointmentEval = evalResults?.appointment_booked as Record<string, any> | undefined;
+    const appointmentBookedByAi = appointmentEval?.result === 'success';
+
     // Sentiment
     const sentimentScore = callSuccessful === 'success' || callSuccessful === 'true' ? 5 :
                            callSuccessful === 'failure' || callSuccessful === 'false' ? 2 : 4;
 
-    // Appointment detection
-    let appointmentBooked = !!(extractedData.appointment_date || extractedData.appointment_time);
-    let appointmentDate = extractedData.appointment_date ?? null;
-    let appointmentTime = extractedData.appointment_time ?? '09:00';
-    let appointmentCallerName = extractedData.caller_name ?? null;
-    let appointmentCallerPhone = extractedData.caller_phone ?? 'widget';
-    let appointmentNotes = extractedData.appointment_notes ?? null;
+    // Appointment detection: trust AI data collection first
+    const appointmentBooked = appointmentBookedByAi || !!(extractedData.appointment_date || extractedData.appointment_time);
+    const appointmentDate = extractedData.appointment_date || null;
+    const appointmentTime = extractedData.appointment_time || '09:00';
+    const appointmentCallerName = extractedData.caller_name || null;
+    const appointmentCallerPhone = extractedData.caller_phone || 'widget';
+    const appointmentReason = extractedData.appointment_reason || null;
+    const callerIntent = extractedData.caller_intent || (appointmentBooked ? 'appointment_booking' : 'inquiry');
 
-    // Smart extraction from transcript (same logic as webhook handler)
-    if (!appointmentBooked && transcriptText) {
-      const lowerTranscript = transcriptText.toLowerCase();
-      const appointmentKeywords = [
-        'ραντεβού', 'ραντεβου', 'appointment',
-        'θα σας καλέσ', 'θα σε καλέσ', 'θα καλέσ',
-        'θα επικοινωνήσ', 'θα σας πάρ', 'will call',
-        'callback', 'call back', 'call you back',
-      ];
-      const hasAppointmentIntent = appointmentKeywords.some((kw) => lowerTranscript.includes(kw));
-
-      if (hasAppointmentIntent) {
-        appointmentBooked = true;
-
-        // Extract date from transcript
-        const datePatterns = [
-          /αύριο|αυριο|tomorrow/i,
-          /μεθαύριο|μεθαυριο|day after tomorrow/i,
-          /(?:στις?\s+)?(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?/,
-        ];
-        for (const pattern of datePatterns) {
-          const match = transcriptText.match(pattern);
-          if (match) {
-            if (/αύριο|αυριο|tomorrow/i.test(match[0])) {
-              const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-              appointmentDate = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
-            } else if (/μεθαύριο|μεθαυριο|day after tomorrow/i.test(match[0])) {
-              const d = new Date(); d.setDate(d.getDate() + 2);
-              appointmentDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            }
-            break;
-          }
-        }
-
-        // Extract time from transcript
-        const timeMatch = transcriptText.match(/(?:στις?\s+)?(\d{1,2})[:\.](\d{2})(?:\s*(?:μμ|μ\.μ\.|pm))?/i);
-        if (timeMatch?.[1] && timeMatch[2]) {
-          appointmentTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
-        }
-
-        // Extract phone number
-        const phoneMatch = transcriptText.match(/(69\d{8}|2\d{9}|\+30\d{10})/);
-        if (phoneMatch?.[1]) appointmentCallerPhone = phoneMatch[1];
-
-        // Extract caller name
-        const nameMatch = transcriptText.match(/(?:ονομάζομαι|λέγομαι|με λένε|my name is|i'm|i am)\s+([Α-Ωα-ωA-Za-z]+)/i);
-        if (nameMatch?.[1]) appointmentCallerName = nameMatch[1];
-
-        if (!appointmentNotes) appointmentNotes = summary ?? transcriptText.slice(0, 300);
-      }
-    }
+    log.info(
+      { conversationId, extractedData, appointmentBookedByAi, appointmentBooked },
+      'AI-extracted data from conversation',
+    );
 
     // Compute start time from conversation metadata
     const startTimeUnix = metadata?.start_time_unix_secs ?? metadata?.startTimeUnixSecs;
     const startedAt = startTimeUnix ? new Date(startTimeUnix * 1000) : new Date(Date.now() - durationSeconds * 1000);
     const endedAt = new Date(startedAt.getTime() + durationSeconds * 1000);
 
-    const intentCategory = appointmentBooked ? 'appointment_booking' : 'inquiry';
+    const intentCategory = callerIntent;
 
     // Insert call record
     const [callRecord] = await db.insert(calls).values({
       customerId: customer.id,
       agentId: agent.id,
       telnyxConversationId: conversationId,
-      callerNumber: 'widget',
+      callerNumber: appointmentCallerPhone !== 'widget' ? appointmentCallerPhone : 'widget',
       agentNumber: agent.phoneNumber || 'widget',
       direction: 'inbound',
       status: 'completed',
@@ -766,13 +727,36 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
       payload: { conversationId, agentId: elevenlabsAgentId, source: 'record-conversation' },
     });
 
-    // Create appointment if detected
+    // Create appointment if AI detected one — with slot conflict resolution
     if (appointmentBooked) {
       try {
         const customerTz = customer.timezone || 'Europe/Athens';
-        const scheduledAt = appointmentDate
+        let scheduledAt = appointmentDate
           ? parseDateTimeInTimezone(appointmentDate, appointmentTime, customerTz)
           : new Date();
+
+        // Check for slot conflicts: find existing appointments within ±30 minutes
+        const slotStart = new Date(scheduledAt.getTime() - 30 * 60 * 1000);
+        const slotEnd = new Date(scheduledAt.getTime() + 30 * 60 * 1000);
+        const conflicting = await db.query.appointments.findMany({
+          where: and(
+            eq(appointments.customerId, customer.id),
+            gte(appointments.scheduledAt, slotStart),
+            lte(appointments.scheduledAt, slotEnd),
+          ),
+          orderBy: [desc(appointments.scheduledAt)],
+        });
+
+        if (conflicting.length > 0) {
+          // Slot taken — move appointment 30 min after the last conflict
+          const lastConflict = conflicting[0]!;
+          const conflictEnd = new Date(lastConflict.scheduledAt.getTime() + (lastConflict.durationMinutes || 30) * 60 * 1000);
+          scheduledAt = conflictEnd;
+          log.info(
+            { originalTime: appointmentDate + ' ' + appointmentTime, movedTo: scheduledAt.toISOString(), conflicts: conflicting.length },
+            'Appointment slot conflict — moved to next available slot',
+          );
+        }
 
         await db.insert(appointments).values({
           customerId: customer.id,
@@ -781,7 +765,7 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
           callerName: appointmentCallerName ?? 'Widget caller',
           callerPhone: appointmentCallerPhone,
           scheduledAt,
-          notes: appointmentNotes ?? summary ?? null,
+          notes: appointmentReason ?? summary ?? null,
           status: 'pending',
         });
         log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment created from widget conversation');

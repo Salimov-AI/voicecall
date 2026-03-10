@@ -241,6 +241,52 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
           maxDurationSeconds: 1800, // 30 min max per call
         },
       },
+      // AI-based post-conversation analysis: extracts structured data and evaluates criteria
+      platformSettings: {
+        evaluation: {
+          criteria: [
+            {
+              id: 'appointment_booked',
+              name: 'Appointment Booked',
+              type: 'prompt',
+              conversationGoalPrompt: 'Was an appointment, callback, or meeting scheduled during this conversation? Answer yes if the caller requested or confirmed a specific date/time for a future interaction, or if the agent promised to arrange a callback.',
+            },
+            {
+              id: 'call_resolved',
+              name: 'Call Resolved',
+              type: 'prompt',
+              conversationGoalPrompt: 'Was the caller\'s request or question fully resolved during this conversation? Answer yes if the caller got the information they needed or their issue was handled.',
+            },
+          ],
+        },
+        dataCollection: {
+          caller_name: {
+            type: 'string',
+            description: 'The full name of the caller. Extract from the conversation if the caller mentions their name (e.g. "My name is...", "Με λένε...", "Ονομάζομαι...").',
+          },
+          caller_phone: {
+            type: 'string',
+            description: 'The phone number of the caller if mentioned during the conversation.',
+          },
+          appointment_date: {
+            type: 'string',
+            description: 'The date of the scheduled appointment/callback in YYYY-MM-DD format. If the caller says "tomorrow", calculate the actual date. If "αύριο" or "μεθαύριο", calculate accordingly. Return null if no appointment was made.',
+          },
+          appointment_time: {
+            type: 'string',
+            description: 'The time of the scheduled appointment/callback in HH:MM format (24h). For example "18:00", "09:30". Return null if no appointment was made.',
+          },
+          appointment_reason: {
+            type: 'string',
+            description: 'Brief description of what the appointment is for — what service or topic the caller wants to discuss. In the same language the conversation was conducted.',
+          },
+          caller_intent: {
+            type: 'string',
+            description: 'The main intent/reason for the call. One of: inquiry, appointment_booking, complaint, support, callback_request, other.',
+            enum: ['inquiry', 'appointment_booking', 'complaint', 'support', 'callback_request', 'other'],
+          },
+        },
+      },
     } as any);
 
     const agentId = (response as any).agentId ?? (response as any).agent_id;
@@ -401,6 +447,53 @@ export async function updateAgent(
   if (Object.keys(conversationConfig).length > 0) {
     body.conversationConfig = conversationConfig;
   }
+
+  // Always include platformSettings with AI data collection and evaluation
+  body.platformSettings = {
+    evaluation: {
+      criteria: [
+        {
+          id: 'appointment_booked',
+          name: 'Appointment Booked',
+          type: 'prompt',
+          conversationGoalPrompt: 'Was an appointment, callback, or meeting scheduled during this conversation? Answer yes if the caller requested or confirmed a specific date/time for a future interaction, or if the agent promised to arrange a callback.',
+        },
+        {
+          id: 'call_resolved',
+          name: 'Call Resolved',
+          type: 'prompt',
+          conversationGoalPrompt: 'Was the caller\'s request or question fully resolved during this conversation? Answer yes if the caller got the information they needed or their issue was handled.',
+        },
+      ],
+    },
+    dataCollection: {
+      caller_name: {
+        type: 'string',
+        description: 'The full name of the caller. Extract from the conversation if the caller mentions their name (e.g. "My name is...", "Με λένε...", "Ονομάζομαι...").',
+      },
+      caller_phone: {
+        type: 'string',
+        description: 'The phone number of the caller if mentioned during the conversation.',
+      },
+      appointment_date: {
+        type: 'string',
+        description: 'The date of the scheduled appointment/callback in YYYY-MM-DD format. If the caller says "tomorrow", calculate the actual date. If "αύριο" or "μεθαύριο", calculate accordingly. Return null if no appointment was made.',
+      },
+      appointment_time: {
+        type: 'string',
+        description: 'The time of the scheduled appointment/callback in HH:MM format (24h). For example "18:00", "09:30". Return null if no appointment was made.',
+      },
+      appointment_reason: {
+        type: 'string',
+        description: 'Brief description of what the appointment is for — what service or topic the caller wants to discuss. In the same language the conversation was conducted.',
+      },
+      caller_intent: {
+        type: 'string',
+        description: 'The main intent/reason for the call. One of: inquiry, appointment_booking, complaint, support, callback_request, other.',
+        enum: ['inquiry', 'appointment_booking', 'complaint', 'support', 'callback_request', 'other'],
+      },
+    },
+  };
 
   try {
     await client.conversationalAi.agents.update(agentId, body);
