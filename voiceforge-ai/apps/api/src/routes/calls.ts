@@ -421,9 +421,11 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
     }
 
     // Pick the most recent conversation
+    // SDK returns camelCase (conversationId) but REST API uses snake_case (conversation_id)
     const latest = conversations[0] as Record<string, any>;
-    const conversationId = latest.conversation_id as string;
+    const conversationId = (latest.conversationId ?? latest.conversation_id) as string;
     if (!conversationId) {
+      log.warn({ latestKeys: Object.keys(latest) }, 'No conversationId found in latest conversation');
       return c.json<ApiResponse>({ success: true, data: null });
     }
 
