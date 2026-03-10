@@ -9,6 +9,7 @@ const nextConfig = {
       bodySizeLimit: '2mb',
     },
   },
+  devIndicators: false, // Disable build indicators in development
   // Security headers (complement to Nginx headers)
   headers: async () => [
     {
