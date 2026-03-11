@@ -7,7 +7,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Mic, Phone, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Mic, MicOff, Phone, AlertCircle, Loader2 } from 'lucide-react';
 import { Button, Spinner } from '@/components/ui';
 import { useI18n } from '@/lib/i18n';
 import { api } from '@/lib/api-client';
@@ -28,11 +28,39 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
   const [scriptError, setScriptError] = useState(false);
   const [micPermission, setMicPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
   const [isRecording, setIsRecording] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetContainerRef = useRef<HTMLDivElement>(null);
   const widgetMountedRef = useRef(false);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const originalGUMRef = useRef<typeof navigator.mediaDevices.getUserMedia | null>(null);
 
-  // Load the ElevenLabs widget script
+  useEffect(() => {
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    originalGUMRef.current = original;
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      const stream = await original(constraints);
+      if (constraints?.audio) {
+        micStreamRef.current = stream;
+      }
+      return stream;
+    };
+    return () => {
+      if (originalGUMRef.current) {
+        navigator.mediaDevices.getUserMedia = originalGUMRef.current;
+      }
+      micStreamRef.current = null;
+    };
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const stream = micStreamRef.current;
+    if (!stream) return;
+    const next = !isMuted;
+    stream.getAudioTracks().forEach((t) => (t.enabled = !next));
+    setIsMuted(next);
+  }, [isMuted]);
+
   useEffect(() => {
     const existingScript = document.querySelector(`script[src="${WIDGET_SCRIPT_URL}"]`);
 
@@ -262,6 +290,19 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
                 ref={widgetContainerRef}
                 className="w-full min-h-[120px] flex items-center justify-center"
               />
+
+              <button
+                onClick={toggleMute}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full transition-colors text-sm font-medium ${
+                  isMuted
+                    ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                    : 'bg-surface-tertiary text-text-secondary hover:bg-surface-quaternary'
+                }`}
+                title={isMuted ? t.testWidget.unmuteMic : t.testWidget.muteMic}
+              >
+                {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                <span>{isMuted ? t.testWidget.unmuteMic : t.testWidget.muteMic}</span>
+              </button>
 
               <p className="text-xs text-text-tertiary text-center max-w-sm">
                 {t.testWidget.pressButton}
