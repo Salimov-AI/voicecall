@@ -202,6 +202,10 @@ export const DEFAULT_TRANSCRIPTION = {
 /** Default telephony settings */
 export const DEFAULT_TELEPHONY = {
   noise_suppression: 'krisp',
+  noise_suppression_config: {
+    attenuation_limit: 100,
+    mode: 'advanced',
+  },
   time_limit_secs: 1800,
   user_idle_timeout_secs: 7215,
 } as const;

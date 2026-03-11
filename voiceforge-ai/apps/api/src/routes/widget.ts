@@ -324,6 +324,20 @@ function generateWidgetScript(apiBaseUrl: string): string {
         return;
       }
 
+      // Enhance browser audio: force noise suppression + echo cancellation
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        var origGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        navigator.mediaDevices.getUserMedia = function(c) {
+          if (c && c.audio) {
+            var a = typeof c.audio === 'boolean'
+              ? { noiseSuppression: true, echoCancellation: true, autoGainControl: true }
+              : Object.assign({}, c.audio, { noiseSuppression: true, echoCancellation: true, autoGainControl: true });
+            return origGUM(Object.assign({}, c, { audio: a }));
+          }
+          return origGUM(c);
+        };
+      }
+
       body.innerHTML = '';
       var convai = document.createElement('elevenlabs-convai');
       convai.setAttribute('agent-id', cfg.elevenlabsAgentId);
