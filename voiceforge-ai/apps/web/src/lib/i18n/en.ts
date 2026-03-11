@@ -636,6 +636,8 @@ export const en: Translations = {
     savingConversation: 'Saving conversation...',
     conversationRecorded: 'Conversation recorded successfully!',
     appointmentDetected: 'Appointment detected and added to calendar!',
+    recordingFailed: 'Could not save conversation. Try speaking for at least 10 seconds.',
+    noConversationDetected: 'No conversation detected. Make sure to use the microphone.',
   },
 
   // ── Calendar ───────────────────────────────────────────────────

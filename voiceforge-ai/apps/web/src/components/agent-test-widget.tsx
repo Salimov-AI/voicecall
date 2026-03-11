@@ -102,7 +102,7 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
   // The backend handles internal polling (up to ~27s) waiting for ElevenLabs
   // to finalize the AI analysis (summary, data collection, evaluation).
   // Frontend waits 5s for the conversation to appear, then makes one call.
-  // One retry if the first attempt returns no conversation.
+  // Two retries with 8s gaps if the first attempt returns no conversation.
   const handleClose = useCallback(async () => {
     if (!widgetMountedRef.current) {
       onClose();
@@ -115,13 +115,17 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
     await new Promise((r) => setTimeout(r, 5000));
 
     let recorded = false;
+    let noConversation = false;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
+        console.info(`[AgentTestWidget] Recording attempt ${attempt + 1}/3...`);
         const result = await api.post<ApiResponse<{ status?: string; id?: string; summary?: string; appointmentBooked?: boolean } | null>>(
           '/api/calls/record-conversation',
           { elevenlabsAgentId: agentId },
         );
+
+        console.info('[AgentTestWidget] Result:', JSON.stringify(result.data));
 
         if (result.success && result.data) {
           if (result.data.status === 'recorded') {
@@ -132,11 +136,13 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
             recorded = true;
             break;
           }
-          if (result.data.status === 'no_new_conversation' && attempt === 0) {
-            // Conversation not in ElevenLabs yet — wait more and retry
-            console.info('[AgentTestWidget] No conversation found yet, retrying after delay...');
-            await new Promise((r) => setTimeout(r, 6000));
-            continue;
+          if (result.data.status === 'no_new_conversation') {
+            noConversation = true;
+            if (attempt < 2) {
+              console.info(`[AgentTestWidget] No conversation found yet, retrying in 8s...`);
+              await new Promise((r) => setTimeout(r, 8000));
+              continue;
+            }
           }
         }
 
@@ -144,15 +150,19 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
         break;
       } catch (err) {
         console.warn(`[AgentTestWidget] Record attempt ${attempt + 1} failed:`, err);
-        if (attempt === 0) {
-          await new Promise((r) => setTimeout(r, 6000));
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 8000));
           continue;
         }
       }
     }
 
     if (!recorded) {
-      toast.error(t.testWidget.widgetLoadError);
+      if (noConversation) {
+        toast.error(t.testWidget.noConversationDetected);
+      } else {
+        toast.error(t.testWidget.recordingFailed);
+      }
     }
 
     setIsRecording(false);

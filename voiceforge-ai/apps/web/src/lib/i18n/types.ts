@@ -580,6 +580,8 @@ export interface Translations {
     savingConversation: string;
     conversationRecorded: string;
     appointmentDetected: string;
+    recordingFailed: string;
+    noConversationDetected: string;
   };
   // ── Calendar ───────────────────────────────────────────────────
   calendar: {

@@ -575,7 +575,7 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
 
     if (!transcriptText) {
       log.info({ conversationId }, 'Conversation has no transcript — skipping');
-      return c.json<ApiResponse>({ success: true, data: null });
+      return c.json<ApiResponse>({ success: true, data: { status: 'no_new_conversation' } });
     }
 
     // Calculate duration
