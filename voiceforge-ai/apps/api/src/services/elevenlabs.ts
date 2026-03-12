@@ -125,13 +125,17 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
     params: { systemToolType: 'end_call' },
   });
 
-  // Add language detection system tool
-  tools.push({
-    type: 'system',
-    name: 'language_detection',
-    description: 'Αναγνώρισε τη γλώσσα του πελάτη',
-    params: { systemToolType: 'language_detection' },
-  });
+  // Add language detection system tool — ONLY for multilingual agents.
+  // For single-language agents, language_detection confuses the model
+  // and causes random language switching despite prompt enforcement.
+  if (params.supportedLanguages && params.supportedLanguages.length > 1) {
+    tools.push({
+      type: 'system',
+      name: 'language_detection',
+      description: 'Αναγνώρισε τη γλώσσα του πελάτη',
+      params: { systemToolType: 'language_detection' },
+    });
+  }
 
   // Add agent transfer tools if targets specified
   if (params.transferTargets && params.transferTargets.length > 0) {
@@ -344,12 +348,15 @@ export async function updateAgent(
       description: 'Κλείσε την κλήση όταν ο πελάτης θέλει να τερματίσει τη συνομιλία',
       params: { systemToolType: 'end_call' },
     });
-    tools.push({
-      type: 'system',
-      name: 'language_detection',
-      description: 'Αναγνώρισε τη γλώσσα του πελάτη',
-      params: { systemToolType: 'language_detection' },
-    });
+    // Add language_detection only for multilingual agents
+    if (updates.supportedLanguages && updates.supportedLanguages.length > 1) {
+      tools.push({
+        type: 'system',
+        name: 'language_detection',
+        description: 'Αναγνώρισε τη γλώσσα του πελάτη',
+        params: { systemToolType: 'language_detection' },
+      });
+    }
 
     // Add agent transfer tool if targets specified
     if (updates.transferTargets && updates.transferTargets.length > 0) {

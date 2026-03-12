@@ -140,6 +140,7 @@ export async function createAssistant(
     },
     telephony_settings: {
       noise_suppression: DEFAULT_TELEPHONY.noise_suppression,
+      noise_suppression_config: DEFAULT_TELEPHONY.noise_suppression_config,
       time_limit_secs: DEFAULT_TELEPHONY.time_limit_secs,
       user_idle_timeout_secs: DEFAULT_TELEPHONY.user_idle_timeout_secs,
       voicemail_detection: {
