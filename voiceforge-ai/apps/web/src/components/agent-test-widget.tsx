@@ -39,6 +39,12 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
     const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     originalGUMRef.current = original;
     navigator.mediaDevices.getUserMedia = async (constraints) => {
+      if (constraints?.audio) {
+        const audioConstraints = typeof constraints.audio === 'boolean'
+          ? { noiseSuppression: true, echoCancellation: true, autoGainControl: true }
+          : { ...constraints.audio, noiseSuppression: true, echoCancellation: true, autoGainControl: true };
+        constraints = { ...constraints, audio: audioConstraints };
+      }
       const stream = await original(constraints);
       if (constraints?.audio) {
         micStreamRef.current = stream;
@@ -83,23 +89,6 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
     };
 
     document.head.appendChild(script);
-  }, []);
-
-  // Enhance browser audio constraints BEFORE the ElevenLabs widget captures the mic.
-  // Forces noise suppression, echo cancellation, and auto gain control.
-  // This is especially important when testing via speakers (not headphones).
-  useEffect(() => {
-    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-    navigator.mediaDevices.getUserMedia = async (constraints) => {
-      if (constraints && typeof constraints === 'object' && constraints.audio) {
-        const audioConstraints = typeof constraints.audio === 'boolean'
-          ? { noiseSuppression: true, echoCancellation: true, autoGainControl: true }
-          : { ...constraints.audio, noiseSuppression: true, echoCancellation: true, autoGainControl: true };
-        return original({ ...constraints, audio: audioConstraints });
-      }
-      return original(constraints);
-    };
-    return () => { navigator.mediaDevices.getUserMedia = original; };
   }, []);
 
   // Mount the custom element imperatively when script is loaded.
