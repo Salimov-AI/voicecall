@@ -9,7 +9,7 @@ import { createLogger } from '../config/logger.js';
 const log = createLogger('email');
 
 const RESEND_API = 'https://api.resend.com/emails';
-const FROM_ADDRESS = 'VoiceForge AI <noreply@voiceforge.ai>';
+const FROM_ADDRESS = env.EMAIL_FROM;
 
 // ── HTML Sanitization — prevents XSS in transactional emails ─────
 
@@ -281,7 +281,7 @@ export async function sendRegistrationNotificationEmail(params: {
       ) * params.durationMonths}`;
 
   // Admin email — in production, set this via env var
-  const adminEmail = 'admin@voiceforge.ai';
+  const adminEmail = env.ADMIN_EMAIL;
 
   await sendEmail({
     to: adminEmail,
@@ -453,4 +453,38 @@ export async function sendLicenseKeyEmail(params: {
     `,
     text: `Κλειδί ενεργοποίησης VoiceForge AI: ${params.licenseKey} — Πακέτο: ${planLabels[params.plan] || params.plan}, Διάρκεια: ${params.durationMonths} μήνες, Ισχύει μέχρι: ${formattedExpiry}. Ενεργοποιήστε στο: ${env.FRONTEND_URL}/activate`,
   });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Unified Call Notification
+// ═══════════════════════════════════════════════════════════════════
+
+export async function notifyCallCompleted(params: {
+  callId: string;
+  customerEmail: string;
+  ownerName: string;
+  callerPhone: string;
+  agentName: string;
+  durationSeconds: number;
+  summary: string | null;
+  sentiment: number | null;
+  appointmentBooked: boolean;
+}): Promise<void> {
+  if (!isEmailConfigured()) return;
+  try {
+    await sendCallSummaryEmail({
+      to: params.customerEmail,
+      ownerName: params.ownerName,
+      callerPhone: params.callerPhone,
+      agentName: params.agentName,
+      durationSeconds: params.durationSeconds,
+      summary: params.summary ?? 'Δεν υπάρχει διαθέσιμη περίληψη.',
+      sentiment: params.sentiment ?? undefined,
+      appointmentBooked: params.appointmentBooked,
+      callId: params.callId,
+    });
+    log.info({ callId: params.callId, to: params.customerEmail }, 'Call summary email sent');
+  } catch (err) {
+    log.error({ error: err, callId: params.callId }, 'Failed to send call summary email');
+  }
 }
